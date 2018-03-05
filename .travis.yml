@@ -12,7 +12,7 @@ os:
 env:
   matrix:
     - ELM_VERSION=0.18.0 TARGET_NODE_VERSION=node
-    - ELM_VERSION=0.18.0 TARGET_NODE_VERSION=4.0
+    # - ELM_VERSION=0.18.0 TARGET_NODE_VERSION=4.0
 
 before_install:
   - if [ ${TRAVIS_OS_NAME} == "osx" ];
@@ -40,6 +40,7 @@ install:
   - printf '%s\n\n' '#!/bin/bash' 'echo "Running elm-make with sysconfcpus -n 2"' '$TRAVIS_BUILD_DIR/sysconfcpus/bin/sysconfcpus -n 2 elm-make-old "$@"' > $(npm config get prefix)/bin/elm-make
   - chmod +x $(npm config get prefix)/bin/elm-make
   - elm package install --yes
+  - cd ..
 
 script:
   - elm-test
