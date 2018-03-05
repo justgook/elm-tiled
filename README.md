@@ -4,7 +4,7 @@ A library for building decoders for [Tiled](http://www.mapeditor.org/) levels.
 
 ## Motivation
 
-I can not find good library that decodes Tiled data and is up to date, and use Javascript ports was not an option.
+I can not find good library that decodes Tiled data and is up to date, and use JavaScript ports was not an option.
 
 
 ## Examples
