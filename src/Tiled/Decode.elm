@@ -1,4 +1,19 @@
-module Tiled.Decode exposing (DefaultProps, Layer, LayerWith(..), Level, LevelWith, Object(..), Options, Properties(..), Tileset(..), decode, decodeWith, defaultOptions, init, initWith)
+module Tiled.Decode
+    exposing
+        ( DefaultProps
+        , Layer
+        , LayerWith(..)
+        , Level
+        , LevelWith
+        , Object(..)
+        , Properties(..)
+        , Tileset(..)
+        , decode
+        , decodeWith
+        , defaultOptions
+        , init
+        , initWith
+        )
 
 {-| Use the `decode` to get default Level or `decodeWith` to get custom decoding version
 
@@ -15,7 +30,7 @@ module Tiled.Decode exposing (DefaultProps, Layer, LayerWith(..), Level, LevelWi
 
 # Definition
 
-@docs Level, Layer, Tileset, DefaultProps, Object, Properties, Options, LayerWith, LevelWith
+@docs Level, Layer, Tileset, DefaultProps, Object, Properties, LayerWith, LevelWith
 
 -}
 
@@ -91,20 +106,10 @@ initWith props =
 {-| -}
 decodeWith : OptionsWith a b c d e f -> Json.Decode.Decoder (LevelWith f d e)
 decodeWith opts =
-    let
-        layerOpts =
-            { imageLayerCustomPropertiesDecode = opts.imageLayerCustomPropertiesDecode
-            , imageLayerDefaultCustomProperties = opts.imageLayerDefaultCustomProperties
-            , tileLayerCustomPropertiesDecode = opts.tileLayerCustomPropertiesDecode
-            , tileLayerDefaultCustomProperties = opts.tileLayerDefaultCustomProperties
-            , objectLayerCustomPropertiesDecode = opts.objectLayerCustomPropertiesDecode
-            , objectLayerDefaultCustomProperties = opts.objectLayerDefaultCustomProperties
-            }
-    in
     Json.Decode.Pipeline.decode LevelWith
         |> required "height" Json.Decode.float
         |> required "infinite" Json.Decode.bool
-        |> required "layers" (opts.decodeLayer layerOpts |> Json.Decode.list)
+        |> required "layers" (opts.decodeLayer opts.layer |> Json.Decode.list)
         |> required "nextobjectid" Json.Decode.int
         |> required "orientation" Json.Decode.string
         |> required "renderorder" Json.Decode.string
@@ -130,37 +135,17 @@ type Properties
 
 {-| -}
 type alias LayerOptionsWith a b c =
-    { imageLayerCustomPropertiesDecode : a -> Json.Decode.Decoder a
-    , imageLayerDefaultCustomProperties : a
-    , tileLayerCustomPropertiesDecode : b -> Json.Decode.Decoder b
-    , tileLayerDefaultCustomProperties : b
-    , objectLayerCustomPropertiesDecode : c -> Json.Decode.Decoder c
-    , objectLayerDefaultCustomProperties : c
+    { imageLayerPropDecode : a -> Json.Decode.Decoder a
+    , imageLayerProps : a
+    , tileLayerPropDecode : b -> Json.Decode.Decoder b
+    , tileLayerProps : b
+    , objectLayerPropDecode : c -> Json.Decode.Decoder c
+    , objectLayerProps : c
     }
 
 
 type alias LayerOptions =
     LayerOptionsWith DefaultProps DefaultProps DefaultProps
-
-
-{-|
-
-    type alias Options =
-        { decodeLayer : LayerOptions -> Json.Decode.Decoder Layer
-        , decodeTileset : Json.Decode.Decoder Tileset
-        , defaultCustomProperties : DefaultProps
-        , imageLayerCustomPropertiesDecode : DefaultProps -> Json.Decode.Decoder DefaultProps
-        , imageLayerDefaultCustomProperties : DefaultProps
-        , objectLayerCustomPropertiesDecode : DefaultProps -> Json.Decode.Decoder DefaultProps
-        , objectLayerDefaultCustomProperties : DefaultProps
-        , properties : DefaultProps -> Json.Decode.Decoder DefaultProps
-        , tileLayerCustomPropertiesDecode : DefaultProps -> Json.Decode.Decoder DefaultProps
-        , tileLayerDefaultCustomProperties : DefaultProps
-        }
-
--}
-type alias Options =
-    OptionsWith DefaultProps DefaultProps DefaultProps Layer Tileset DefaultProps
 
 
 {-| -}
@@ -169,35 +154,48 @@ type alias OptionsWith a b c d e f =
     , decodeTileset : Json.Decode.Decoder e
     , defaultCustomProperties : f
     , properties : f -> Json.Decode.Decoder f
-    , imageLayerCustomPropertiesDecode : a -> Json.Decode.Decoder a
-    , imageLayerDefaultCustomProperties : a
-    , tileLayerCustomPropertiesDecode : b -> Json.Decode.Decoder b
-    , tileLayerDefaultCustomProperties : b
-    , objectLayerCustomPropertiesDecode : c -> Json.Decode.Decoder c
-    , objectLayerDefaultCustomProperties : c
+    , layer : LayerOptionsWith a b c
+    }
+
+
+type alias Options a b c d e f g k k1 k2 k3 v v1 v2 v3 =
+    { decodeLayer : LayerOptionsWith a b c -> Json.Decode.Decoder (LayerWith a b c)
+    , decodeTileset : Json.Decode.Decoder Tileset
+    , defaultCustomProperties : Dict k v
+    , layer :
+        { imageLayerPropDecode : d -> Json.Decode.Decoder (Dict String Properties)
+        , imageLayerProps : Dict k1 v1
+        , objectLayerProps : Dict k2 v2
+        , objectLayerPropDecode : e -> Json.Decode.Decoder (Dict String Properties)
+        , tileLayerProps : Dict k3 v3
+        , tileLayerPropDecode : f -> Json.Decode.Decoder (Dict String Properties)
+        }
+    , properties : g -> Json.Decode.Decoder (Dict String Properties)
     }
 
 
 {-| -}
-defaultOptions : Options
+defaultOptions : Options a b c d e f g k k1 k2 k3 v v1 v2 v3
 defaultOptions =
     let
-        properties =
+        propDecode =
             \_ -> decodeCustomProperties
 
-        defaultCustomProperties =
+        defaultProps =
             Dict.empty
     in
-    { decodeLayer = \layer -> decodeLayerDefault layer
+    { decodeLayer = \layer -> decodeLayer layer
     , decodeTileset = decodeTilesetDefault
-    , properties = properties
-    , defaultCustomProperties = defaultCustomProperties
-    , imageLayerCustomPropertiesDecode = properties
-    , imageLayerDefaultCustomProperties = defaultCustomProperties
-    , tileLayerCustomPropertiesDecode = properties
-    , tileLayerDefaultCustomProperties = defaultCustomProperties
-    , objectLayerCustomPropertiesDecode = properties
-    , objectLayerDefaultCustomProperties = defaultCustomProperties
+    , properties = propDecode
+    , defaultCustomProperties = defaultProps
+    , layer =
+        { imageLayerPropDecode = propDecode
+        , imageLayerProps = defaultProps
+        , tileLayerPropDecode = propDecode
+        , tileLayerProps = defaultProps
+        , objectLayerPropDecode = propDecode
+        , objectLayerProps = defaultProps
+        }
     }
 
 
@@ -487,8 +485,8 @@ type alias ObjectLayerDataWith customProperties =
 
 
 {-| -}
-decodeLayerDefault : LayerOptions -> Json.Decode.Decoder Layer
-decodeLayerDefault { imageLayerCustomPropertiesDecode, imageLayerDefaultCustomProperties, tileLayerCustomPropertiesDecode, tileLayerDefaultCustomProperties, objectLayerCustomPropertiesDecode, objectLayerDefaultCustomProperties } =
+decodeLayer : LayerOptionsWith a b c -> Json.Decode.Decoder (LayerWith a b c)
+decodeLayer { imageLayerPropDecode, imageLayerProps, tileLayerPropDecode, tileLayerProps, objectLayerPropDecode, objectLayerProps } =
     field "type" Json.Decode.string
         |> Json.Decode.andThen
             (\string ->
@@ -496,19 +494,19 @@ decodeLayerDefault { imageLayerCustomPropertiesDecode, imageLayerDefaultCustomPr
                     "tilelayer" ->
                         Json.Decode.map TileLayer
                             (decodeTileLayer
-                                |> optional "properties" (tileLayerCustomPropertiesDecode tileLayerDefaultCustomProperties) tileLayerDefaultCustomProperties
+                                |> optional "properties" (tileLayerPropDecode tileLayerProps) tileLayerProps
                             )
 
                     "imagelayer" ->
                         Json.Decode.map ImageLayer
                             (decodeImageLayer
-                                |> optional "properties" (imageLayerCustomPropertiesDecode imageLayerDefaultCustomProperties) imageLayerDefaultCustomProperties
+                                |> optional "properties" (imageLayerPropDecode imageLayerProps) imageLayerProps
                             )
 
                     "objectgroup" ->
                         Json.Decode.map ObjectLayer
                             (decodeObjectLayer
-                                |> optional "properties" (objectLayerCustomPropertiesDecode objectLayerDefaultCustomProperties) objectLayerDefaultCustomProperties
+                                |> optional "properties" (objectLayerPropDecode objectLayerProps) objectLayerProps
                             )
 
                     _ ->

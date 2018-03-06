@@ -1,5 +1,3 @@
-#elm-tiled-decode
-
 A library for building decoders for [Tiled](http://www.mapeditor.org/) levels.
 
 ## Motivation
