@@ -1,18 +1,17 @@
 module Tiled.Decode
     exposing
         ( DefaultProps
-        , Layer
-        , LayerWith(..)
-        , Level
+        , EmbeddedTileData
+        , Layer(..)
         , LevelWith
         , Object(..)
-        , Properties(..)
+        , Options
+        , Property(..)
         , Tileset(..)
         , decode
         , decodeWith
         , defaultOptions
         , init
-        , initWith
         )
 
 {-| Use the `decode` to get default Level or `decodeWith` to get custom decoding version
@@ -25,40 +24,47 @@ module Tiled.Decode
 
 # Custom Decoding
 
-@docs initWith, decodeWith, defaultOptions
+@docs decodeWith, defaultOptions
 
 
 # Definition
 
-@docs Level, Layer, Tileset, DefaultProps, Object, Properties, LayerWith, LevelWith
+@docs DefaultProps, LevelWith, Property,EmbeddedTileData, Layer, Tileset,Options, Object
 
 -}
 
 import BinaryBase64
 import Bitwise exposing (or, shiftLeftBy)
 import Dict exposing (Dict)
-import Json.Decode exposing (field)
-import Json.Decode.Pipeline exposing (decode, hardcoded, optional, required)
+import Json.Decode as Decode exposing (Decoder, field)
+import Json.Decode.Pipeline as Pipeline exposing (decode, hardcoded, optional, required)
 
 
 -- https://robots.thoughtbot.com/5-common-json-decoders#5---conditional-decoding-based-on-a-field
 -- http://eeue56.github.io/json-to-elm/
 
 
-{-| Default decode structure
--}
-type alias Level =
-    LevelWith DefaultProps Layer Tileset
-
-
 {-| Props that is used for custom props
 -}
 type alias DefaultProps =
-    Dict String Properties
+    Dict String Property
 
 
-{-| -}
-type alias LevelWith customProperties layer tileset =
+{-| Custom props values
+-}
+type Property
+    = PropBool Bool
+    | PropColor String
+    | PropFloat Float
+    | PropFile String
+    | PropInt Int
+    | PropString String
+
+
+{-| Extendable structure
+if You would like use custom post parsers looke @decodeWith
+-}
+type alias LevelWith layer tileset =
     { height : Float
     , infinite : Bool
     , layers : List layer
@@ -72,20 +78,13 @@ type alias LevelWith customProperties layer tileset =
     , kind : String
     , version : Float
     , width : Float
-    , properties : customProperties
+    , properties : DefaultProps
     }
 
 
-{-| Crate Empty data level
--}
-init : Level
-init =
-    initWith Dict.empty
-
-
 {-| -}
-initWith : props -> LevelWith props layer tileset
-initWith props =
+init : LevelWith layer tileset
+init =
     { height = 0
     , infinite = False
     , layers = []
@@ -99,149 +98,100 @@ initWith props =
     , kind = ""
     , version = 0
     , width = 0
-    , properties = props
+    , properties = Dict.empty
     }
 
 
 {-| -}
-decodeWith : OptionsWith a b c d e f -> Json.Decode.Decoder (LevelWith f d e)
-decodeWith opts =
-    Json.Decode.Pipeline.decode LevelWith
-        |> required "height" Json.Decode.float
-        |> required "infinite" Json.Decode.bool
-        |> required "layers" (opts.decodeLayer opts.layer |> Json.Decode.list)
-        |> required "nextobjectid" Json.Decode.int
-        |> required "orientation" Json.Decode.string
-        |> required "renderorder" Json.Decode.string
-        |> required "tiledversion" Json.Decode.string
-        |> required "tileheight" Json.Decode.float
-        |> required "tilesets" (opts.decodeTileset |> Json.Decode.list)
-        |> required "tilewidth" Json.Decode.float
-        |> required "type" Json.Decode.string
-        |> required "version" Json.Decode.float
-        |> required "width" Json.Decode.float
-        |> optional "properties" (opts.properties opts.defaultCustomProperties) opts.defaultCustomProperties
-
-
-{-| -}
-type Properties
-    = PropBool Bool
-    | PropColor String
-    | PropFloat Float
-    | PropFile String
-    | PropInt Int
-    | PropString String
-
-
-{-| -}
-type alias LayerOptionsWith a b c =
-    { imageLayerPropDecode : a -> Json.Decode.Decoder a
-    , imageLayerProps : a
-    , tileLayerPropDecode : b -> Json.Decode.Decoder b
-    , tileLayerProps : b
-    , objectLayerPropDecode : c -> Json.Decode.Decoder c
-    , objectLayerProps : c
-    }
-
-
-type alias LayerOptions =
-    LayerOptionsWith DefaultProps DefaultProps DefaultProps
-
-
-{-| -}
-type alias OptionsWith a b c d e f =
-    { decodeLayer : LayerOptionsWith a b c -> Json.Decode.Decoder d
-    , decodeTileset : Json.Decode.Decoder e
-    , defaultCustomProperties : f
-    , properties : f -> Json.Decode.Decoder f
-    , layer : LayerOptionsWith a b c
-    }
-
-
-type alias Options a b c d e f g k k1 k2 k3 v v1 v2 v3 =
-    { decodeLayer : LayerOptionsWith a b c -> Json.Decode.Decoder (LayerWith a b c)
-    , decodeTileset : Json.Decode.Decoder Tileset
-    , defaultCustomProperties : Dict k v
-    , layer :
-        { imageLayerPropDecode : d -> Json.Decode.Decoder (Dict String Properties)
-        , imageLayerProps : Dict k1 v1
-        , objectLayerProps : Dict k2 v2
-        , objectLayerPropDecode : e -> Json.Decode.Decoder (Dict String Properties)
-        , tileLayerProps : Dict k3 v3
-        , tileLayerPropDecode : f -> Json.Decode.Decoder (Dict String Properties)
-        }
-    , properties : g -> Json.Decode.Decoder (Dict String Properties)
+type alias Options layer tileset =
+    { postLayer : Layer -> Decoder layer
+    , postTilest : Tileset -> Decoder tileset
     }
 
 
 {-| -}
-defaultOptions : Options a b c d e f g k k1 k2 k3 v v1 v2 v3
+defaultOptions : { postLayer : layer -> Decoder layer, postTilest : tileset -> Decoder tileset }
 defaultOptions =
-    let
-        propDecode =
-            \_ -> decodeCustomProperties
-
-        defaultProps =
-            Dict.empty
-    in
-    { decodeLayer = \layer -> decodeLayer layer
-    , decodeTileset = decodeTilesetDefault
-    , properties = propDecode
-    , defaultCustomProperties = defaultProps
-    , layer =
-        { imageLayerPropDecode = propDecode
-        , imageLayerProps = defaultProps
-        , tileLayerPropDecode = propDecode
-        , tileLayerProps = defaultProps
-        , objectLayerPropDecode = propDecode
-        , objectLayerProps = defaultProps
-        }
+    { postLayer = Decode.succeed
+    , postTilest = Decode.succeed
     }
 
 
 {-| -}
-decodeCustomProperties : Json.Decode.Decoder (Dict String Properties)
-decodeCustomProperties =
-    Json.Decode.list
-        (Json.Decode.Pipeline.decode identity
-            |> required "type" Json.Decode.string
-            |> Json.Decode.andThen
-                (\kind ->
-                    Json.Decode.Pipeline.decode (,)
-                        |> required "name" Json.Decode.string
-                        |> required "value"
-                            (case kind of
-                                "bool" ->
-                                    Json.Decode.map PropBool Json.Decode.bool
-
-                                "color" ->
-                                    Json.Decode.map PropColor Json.Decode.string
-
-                                "float" ->
-                                    Json.Decode.map PropFloat Json.Decode.float
-
-                                "file" ->
-                                    Json.Decode.map PropFile Json.Decode.string
-
-                                "int" ->
-                                    Json.Decode.map PropInt Json.Decode.int
-
-                                _ ->
-                                    Json.Decode.oneOf
-                                        [ Json.Decode.map toString Json.Decode.float
-                                        , Json.Decode.string
-                                        ]
-                                        |> Json.Decode.map PropString
-                            )
-                )
-        )
-        |> Json.Decode.map Dict.fromList
-
-
-{-| -}
-decode : Json.Decode.Decoder Level
+decode : Decoder (LevelWith Layer Tileset)
 decode =
     decodeWith defaultOptions
+
+
+{-| Custom decoder
+-}
+decodeWith : Options layer tileset -> Decoder (LevelWith layer tileset)
+decodeWith opts =
+    Pipeline.decode LevelWith
+        |> required "height" Decode.float
+        |> required "infinite" Decode.bool
+        |> required "layers" (decodeLayer |> Decode.andThen opts.postLayer |> Decode.list)
+        |> required "nextobjectid" Decode.int
+        |> required "orientation" Decode.string
+        |> required "renderorder" Decode.string
+        |> required "tiledversion" Decode.string
+        |> required "tileheight" Decode.float
+        |> required "tilesets" (decodeTileset |> Decode.andThen opts.postTilest |> Decode.list)
+        |> required "tilewidth" Decode.float
+        |> required "type" Decode.string
+        |> required "version" Decode.float
+        |> required "width" Decode.float
+        |> Pipeline.custom propertiesDecoder
+
+
+{-| Decoding properties as Dict String Poperty
+-}
+propertiesDecoder : Decoder DefaultProps
+propertiesDecoder =
+    let
+        combine : List (Decoder a) -> Decoder (List a)
+        combine =
+            List.foldr (Decode.map2 (::)) (Decode.succeed [])
+
+        propertyDecoder : String -> Decoder Property
+        propertyDecoder typeString =
+            case typeString of
+                "bool" ->
+                    Decode.map PropBool Decode.bool
+
+                "color" ->
+                    Decode.map PropColor Decode.string
+
+                "float" ->
+                    Decode.map PropFloat Decode.float
+
+                "file" ->
+                    Decode.map PropFile Decode.string
+
+                "int" ->
+                    Decode.map PropInt Decode.int
+
+                "string" ->
+                    Decode.map PropString Decode.string
+
+                _ ->
+                    Decode.fail <| "I can't decode the type " ++ typeString
+
+        decodeProperty : ( String, String ) -> Decoder ( String, Property )
+        decodeProperty ( propName, propType ) =
+            Decode.at [ "properties", propName ]
+                (propertyDecoder propType)
+                |> Decode.map ((,) propName)
+
+        propertiesDecoder : Decoder (Dict String Property)
+        propertiesDecoder =
+            Decode.field "propertytypes" (Decode.keyValuePairs Decode.string)
+                |> Decode.map (List.map decodeProperty)
+                |> Decode.andThen combine
+                |> Decode.map Dict.fromList
+    in
+    Decode.maybe propertiesDecoder
+        |> Decode.map (Maybe.withDefault Dict.empty)
 
 
 {-| -}
@@ -251,9 +201,9 @@ type Tileset
 
 
 {-| -}
-decodeTilesetDefault : Json.Decode.Decoder Tileset
-decodeTilesetDefault =
-    Json.Decode.oneOf [ decodeEmbeddedTileset, decodeSourceTileset ]
+decodeTileset : Decoder Tileset
+decodeTileset =
+    Decode.oneOf [ decodeEmbeddedTileset, decodeSourceTileset ]
 
 
 {-| -}
@@ -264,12 +214,12 @@ type alias SourceTileData =
 
 
 {-| -}
-decodeSourceTileset : Json.Decode.Decoder Tileset
+decodeSourceTileset : Decoder Tileset
 decodeSourceTileset =
-    Json.Decode.Pipeline.decode SourceTileData
-        |> required "firstgid" Json.Decode.int
-        |> required "source" Json.Decode.string
-        |> Json.Decode.map TilesetSource
+    Pipeline.decode SourceTileData
+        |> required "firstgid" Decode.int
+        |> required "source" Decode.string
+        |> Decode.map TilesetSource
 
 
 {-| -}
@@ -287,59 +237,47 @@ type alias EmbeddedTileData =
     , tilewidth : Int
     , transparentcolor : String
     , tiles : Dict Int TilesData
+    , properties : DefaultProps
     }
 
 
 {-| -}
-decodeEmbeddedTileset : Json.Decode.Decoder Tileset
+decodeEmbeddedTileset : Decoder Tileset
 decodeEmbeddedTileset =
-    Json.Decode.Pipeline.decode EmbeddedTileData
-        |> required "columns" Json.Decode.int
-        |> required "firstgid" Json.Decode.int
-        |> required "image" Json.Decode.string
-        |> required "imageheight" Json.Decode.int
-        |> required "imagewidth" Json.Decode.int
-        |> required "margin" Json.Decode.int
-        |> required "name" Json.Decode.string
-        |> required "spacing" Json.Decode.int
-        |> required "tilecount" Json.Decode.int
-        |> required "tileheight" Json.Decode.int
-        |> required "tilewidth" Json.Decode.int
-        |> required "transparentcolor" Json.Decode.string
+    Pipeline.decode EmbeddedTileData
+        |> required "columns" Decode.int
+        |> required "firstgid" Decode.int
+        |> required "image" Decode.string
+        |> required "imageheight" Decode.int
+        |> required "imagewidth" Decode.int
+        |> required "margin" Decode.int
+        |> required "name" Decode.string
+        |> required "spacing" Decode.int
+        |> required "tilecount" Decode.int
+        |> required "tileheight" Decode.int
+        |> required "tilewidth" Decode.int
+        |> required "transparentcolor" Decode.string
         |> optional "tiles" decodeTiles Dict.empty
-        |> Json.Decode.map TilesetEmbedded
+        |> Pipeline.custom propertiesDecoder
+        |> Decode.map TilesetEmbedded
 
 
 {-| -}
-decodeTiles : Json.Decode.Decoder (Dict Int TilesData)
+decodeTiles : Decoder (Dict Int TilesData)
 decodeTiles =
-    let
-        newFormat =
-            Json.Decode.list decodeTilesDataNew
-                |> Json.Decode.andThen
-                    (List.foldl
-                        (\data acc ->
-                            acc |> Json.Decode.andThen (Dict.insert data.id { animation = data.animation, objectgroup = data.objectgroup } >> Json.Decode.succeed)
-                        )
-                        (Json.Decode.succeed Dict.empty)
-                    )
+    Decode.keyValuePairs decodeTilesData
+        |> Decode.andThen
+            (List.foldl
+                (\( i, data ) acc ->
+                    case String.toInt i of
+                        Ok index ->
+                            acc |> Decode.andThen (Dict.insert index data >> Decode.succeed)
 
-        oldFormat =
-            Json.Decode.keyValuePairs decodeTilesData
-                |> Json.Decode.andThen
-                    (List.foldl
-                        (\( i, data ) acc ->
-                            case String.toInt i of
-                                Ok index ->
-                                    acc |> Json.Decode.andThen (Dict.insert index data >> Json.Decode.succeed)
-
-                                Err a ->
-                                    Json.Decode.fail a
-                        )
-                        (Json.Decode.succeed Dict.empty)
-                    )
-    in
-    Json.Decode.oneOf [ oldFormat, newFormat ]
+                        Err a ->
+                            Decode.fail a
+                )
+                (Decode.succeed Dict.empty)
+            )
 
 
 {-| -}
@@ -369,34 +307,34 @@ type alias TilesDataObjectgroup =
 
 
 {-| -}
-decodeTilesData : Json.Decode.Decoder { animation : Maybe (List SpriteAnimation), objectgroup : Maybe TilesDataObjectgroup }
+decodeTilesData : Decoder { animation : Maybe (List SpriteAnimation), objectgroup : Maybe TilesDataObjectgroup }
 decodeTilesData =
-    Json.Decode.map2 (\a b -> { animation = a, objectgroup = b })
-        (Json.Decode.maybe (field "animation" (Json.Decode.list decodeSpriteAnimation)))
-        (Json.Decode.maybe (field "objectgroup" decodeTilesDataObjectgroup))
+    Decode.map2 (\a b -> { animation = a, objectgroup = b })
+        (Decode.maybe (field "animation" (Decode.list decodeSpriteAnimation)))
+        (Decode.maybe (field "objectgroup" decodeTilesDataObjectgroup))
 
 
 {-| -}
-decodeTilesDataNew : Json.Decode.Decoder (TilesDataPlain { id : Int })
+decodeTilesDataNew : Decoder (TilesDataPlain { id : Int })
 decodeTilesDataNew =
-    Json.Decode.map3 (\a b c -> { animation = a, objectgroup = b, id = c })
-        (Json.Decode.maybe (field "animation" (Json.Decode.list decodeSpriteAnimation)))
-        (Json.Decode.maybe (field "objectgroup" decodeTilesDataObjectgroup))
-        (field "id" Json.Decode.int)
+    Decode.map3 (\a b c -> { animation = a, objectgroup = b, id = c })
+        (Decode.maybe (field "animation" (Decode.list decodeSpriteAnimation)))
+        (Decode.maybe (field "objectgroup" decodeTilesDataObjectgroup))
+        (field "id" Decode.int)
 
 
 {-| -}
-decodeTilesDataObjectgroup : Json.Decode.Decoder TilesDataObjectgroup
+decodeTilesDataObjectgroup : Decoder TilesDataObjectgroup
 decodeTilesDataObjectgroup =
-    Json.Decode.Pipeline.decode TilesDataObjectgroup
-        |> Json.Decode.Pipeline.required "draworder" Json.Decode.string
-        |> Json.Decode.Pipeline.required "name" Json.Decode.string
-        |> Json.Decode.Pipeline.required "objects" (Json.Decode.list decodeObject)
-        |> Json.Decode.Pipeline.required "opacity" Json.Decode.int
-        |> Json.Decode.Pipeline.required "type" Json.Decode.string
-        |> Json.Decode.Pipeline.required "visible" Json.Decode.bool
-        |> Json.Decode.Pipeline.required "x" Json.Decode.int
-        |> Json.Decode.Pipeline.required "y" Json.Decode.int
+    Pipeline.decode TilesDataObjectgroup
+        |> Pipeline.required "draworder" Decode.string
+        |> Pipeline.required "name" Decode.string
+        |> Pipeline.required "objects" (Decode.list decodeObject)
+        |> Pipeline.required "opacity" Decode.int
+        |> Pipeline.required "type" Decode.string
+        |> Pipeline.required "visible" Decode.bool
+        |> Pipeline.required "x" Decode.int
+        |> Pipeline.required "y" Decode.int
 
 
 {-| -}
@@ -407,32 +345,22 @@ type alias SpriteAnimation =
 
 
 {-| -}
-decodeSpriteAnimation : Json.Decode.Decoder SpriteAnimation
+decodeSpriteAnimation : Decoder SpriteAnimation
 decodeSpriteAnimation =
-    Json.Decode.map2 SpriteAnimation
-        (field "duration" Json.Decode.int)
-        (field "tileid" Json.Decode.int)
+    Decode.map2 SpriteAnimation
+        (field "duration" Decode.int)
+        (field "tileid" Decode.int)
 
 
 {-| -}
-type alias Layer =
-    LayerWith DefaultProps DefaultProps DefaultProps
-
-
-{-| -}
-type LayerWith imageLayerProps tileLayerProps objectLayerProps
-    = ImageLayer (ImageLayerDataWith imageLayerProps)
-    | TileLayer (TileLayerDataWith tileLayerProps)
-    | ObjectLayer (ObjectLayerDataWith objectLayerProps)
+type Layer
+    = ImageLayer ImageLayerData
+    | TileLayer TileLayerData
+    | ObjectLayer ObjectLayerData
 
 
 {-| -}
 type alias ImageLayerData =
-    ImageLayerDataWith (Dict String String)
-
-
-{-| -}
-type alias ImageLayerDataWith customProperties =
     { image : String
     , name : String
     , opacity : Float
@@ -441,17 +369,12 @@ type alias ImageLayerDataWith customProperties =
     , x : Float
     , y : Float
     , transparentcolor : String
-    , properties : customProperties
+    , properties : DefaultProps
     }
 
 
 {-| -}
 type alias TileLayerData =
-    TileLayerDataWith (Dict String String)
-
-
-{-| -}
-type alias TileLayerDataWith customProperties =
     { data : List Int
     , height : Float
     , name : String
@@ -461,17 +384,12 @@ type alias TileLayerDataWith customProperties =
     , width : Float
     , x : Float
     , y : Float
-    , properties : customProperties
+    , properties : DefaultProps
     }
 
 
 {-| -}
 type alias ObjectLayerData =
-    ObjectLayerDataWith (Dict String String)
-
-
-{-| -}
-type alias ObjectLayerDataWith customProperties =
     { draworder : String
     , name : String
     , objects : List Object
@@ -480,100 +398,93 @@ type alias ObjectLayerDataWith customProperties =
     , visible : Bool
     , x : Int
     , y : Int
-    , properties : customProperties
+    , properties : DefaultProps
     }
 
 
 {-| -}
-decodeLayer : LayerOptionsWith a b c -> Json.Decode.Decoder (LayerWith a b c)
-decodeLayer { imageLayerPropDecode, imageLayerProps, tileLayerPropDecode, tileLayerProps, objectLayerPropDecode, objectLayerProps } =
-    field "type" Json.Decode.string
-        |> Json.Decode.andThen
+decodeLayer : Decoder Layer
+decodeLayer =
+    field "type" Decode.string
+        |> Decode.andThen
             (\string ->
                 case string of
                     "tilelayer" ->
-                        Json.Decode.map TileLayer
-                            (decodeTileLayer
-                                |> optional "properties" (tileLayerPropDecode tileLayerProps) tileLayerProps
-                            )
+                        Decode.map TileLayer
+                            decodeTileLayer
 
                     "imagelayer" ->
-                        Json.Decode.map ImageLayer
-                            (decodeImageLayer
-                                |> optional "properties" (imageLayerPropDecode imageLayerProps) imageLayerProps
-                            )
+                        Decode.map ImageLayer
+                            decodeImageLayer
 
                     "objectgroup" ->
-                        Json.Decode.map ObjectLayer
-                            (decodeObjectLayer
-                                |> optional "properties" (objectLayerPropDecode objectLayerProps) objectLayerProps
-                            )
+                        Decode.map ObjectLayer
+                            decodeObjectLayer
 
                     _ ->
-                        Json.Decode.fail ("Invalid layer type: " ++ string)
+                        Decode.fail ("Invalid layer type: " ++ string)
             )
 
 
 {-| -}
-decodeImageLayer : Json.Decode.Decoder (customProperties -> ImageLayerDataWith customProperties)
+decodeImageLayer : Decoder ImageLayerData
 decodeImageLayer =
-    Json.Decode.Pipeline.decode ImageLayerDataWith
-        |> required "image" Json.Decode.string
-        |> required "name" Json.Decode.string
-        |> required "opacity" Json.Decode.float
-        |> required "type" Json.Decode.string
-        |> required "visible" Json.Decode.bool
-        |> required "x" Json.Decode.float
-        |> required "y" Json.Decode.float
-        |> optional "transparentcolor" Json.Decode.string "none"
+    Pipeline.decode ImageLayerData
+        |> required "image" Decode.string
+        |> required "name" Decode.string
+        |> required "opacity" Decode.float
+        |> required "type" Decode.string
+        |> required "visible" Decode.bool
+        |> required "x" Decode.float
+        |> required "y" Decode.float
+        |> optional "transparentcolor" Decode.string "none"
+        |> Pipeline.custom propertiesDecoder
 
 
 {-| -}
-decodeTileLayer : Json.Decode.Decoder (customProperties -> TileLayerDataWith customProperties)
+decodeTileLayer : Decoder TileLayerData
 decodeTileLayer =
-    Json.Decode.Pipeline.decode (,)
-        |> optional "encoding" Json.Decode.string "none"
-        |> optional "compression" Json.Decode.string "none"
-        |> Json.Decode.andThen
+    Pipeline.decode (,)
+        |> optional "encoding" Decode.string "none"
+        |> optional "compression" Decode.string "none"
+        |> Decode.andThen
             (\( encoding, compression ) ->
-                Json.Decode.Pipeline.decode TileLayerDataWith
+                Pipeline.decode TileLayerData
                     |> required "data" (decodeTileLayerData encoding compression)
-                    |> required "height" Json.Decode.float
-                    |> required "name" Json.Decode.string
-                    |> required "opacity" Json.Decode.float
-                    |> required "type" Json.Decode.string
-                    |> required "visible" Json.Decode.bool
-                    |> required "width" Json.Decode.float
-                    |> required "x" Json.Decode.float
-                    |> required "y" Json.Decode.float
+                    |> required "height" Decode.float
+                    |> required "name" Decode.string
+                    |> required "opacity" Decode.float
+                    |> required "type" Decode.string
+                    |> required "visible" Decode.bool
+                    |> required "width" Decode.float
+                    |> required "x" Decode.float
+                    |> required "y" Decode.float
+                    |> Pipeline.custom propertiesDecoder
             )
 
 
-{-| -}
-decodeTileLayerData : String -> String -> Json.Decode.Decoder (List Int)
+decodeTileLayerData : String -> String -> Decoder (List Int)
 decodeTileLayerData encoding compression =
     if compression /= "none" then
-        Json.Decode.fail "Tile layer compression not supported yet"
+        Decode.fail "Tile layer compression not supported yet"
     else if encoding == "base64" then
-        Json.Decode.string
-            |> Json.Decode.andThen
+        Decode.string
+            |> Decode.andThen
                 (\string ->
                     string
                         |> BinaryBase64.decode
-                        |> Result.map (\data -> Json.Decode.succeed (convertTilesData data))
-                        |> resultExtract (\err -> Json.Decode.fail err)
+                        |> Result.map (\data -> Decode.succeed (convertTilesData data))
+                        |> resultExtract (\err -> Decode.fail err)
                 )
     else
-        Json.Decode.list Json.Decode.int
+        Decode.list Decode.int
 
 
-{-| -}
 shiftValues : List Int
 shiftValues =
     [ 0, 8, 16, 24 ]
 
 
-{-| -}
 convertTilesData : BinaryBase64.ByteString -> List Int
 convertTilesData octets =
     let
@@ -599,13 +510,9 @@ zip =
     List.map2 (,)
 
 
-
--- http://package.elm-lang.org/packages/elm-community/result-extra/2.2.0/Result-Extra
-
-
-{-| -}
 resultExtract : (e -> a) -> Result e a -> a
 resultExtract f x =
+    -- http://package.elm-lang.org/packages/elm-community/result-extra/2.2.0/Result-Extra
     case x of
         Ok a ->
             a
@@ -615,17 +522,18 @@ resultExtract f x =
 
 
 {-| -}
-decodeObjectLayer : Json.Decode.Decoder (customProperties -> ObjectLayerDataWith customProperties)
+decodeObjectLayer : Decoder ObjectLayerData
 decodeObjectLayer =
-    Json.Decode.Pipeline.decode ObjectLayerDataWith
-        |> required "draworder" Json.Decode.string
-        |> required "name" Json.Decode.string
-        |> required "objects" (Json.Decode.list decodeObject)
-        |> required "opacity" Json.Decode.float
-        |> required "type" Json.Decode.string
-        |> required "visible" Json.Decode.bool
-        |> required "x" Json.Decode.int
-        |> required "y" Json.Decode.int
+    Pipeline.decode ObjectLayerData
+        |> required "draworder" Decode.string
+        |> required "name" Decode.string
+        |> required "objects" (Decode.list decodeObject)
+        |> required "opacity" Decode.float
+        |> required "type" Decode.string
+        |> required "visible" Decode.bool
+        |> required "x" Decode.int
+        |> required "y" Decode.int
+        |> Pipeline.custom propertiesDecoder
 
 
 {-| -}
@@ -634,36 +542,40 @@ type Object
     | ObjectPoint ObjectPointData
     | ObjectPolygon ObjectPolygonData
     | ObjectEllipse ObjectRectangleData
-      -- | ObjectPolyLine
+    | ObjectPolyLine ObjectPolygonData
     | ObjectTile ObjectTileleData
 
 
 {-| -}
-decodeObject : Json.Decode.Decoder Object
+decodeObject : Decoder Object
 decodeObject =
-    -- maybe use Json.Decode.Pipeline.resolve
-    Json.Decode.Pipeline.decode (,,,)
-        |> optional "point" Json.Decode.bool False
-        |> optional "ellipse" Json.Decode.bool False
-        |> optional "polygon" (Json.Decode.list decodeObjectPolygonPoint) []
-        |> optional "gid" Json.Decode.int 0
-        |> Json.Decode.andThen
-            (\( point, ellipse, polygon, gid ) ->
-                case ( point, ellipse, polygon, gid ) of
-                    ( False, False, [], 0 ) ->
-                        Json.Decode.map ObjectRectangle decodeObjectRectangle
+    -- maybe use Pipeline.resolve
+    Pipeline.decode (,,,,)
+        |> optional "point" Decode.bool False
+        |> optional "ellipse" Decode.bool False
+        |> optional "polygon" (Decode.list decodeObjectPolygonPoint) []
+        |> optional "gid" Decode.int 0
+        |> optional "polyline" (Decode.list decodeObjectPolygonPoint) []
+        |> Decode.andThen
+            (\( point, ellipse, polygon, gid, polyline ) ->
+                case ( point, ellipse, polygon, polyline, gid ) of
+                    ( False, False, [], [], 0 ) ->
+                        Decode.map ObjectRectangle decodeObjectRectangle
 
-                    ( True, _, [], 0 ) ->
-                        Json.Decode.map ObjectPoint decodeObjectPoint
+                    ( True, _, [], [], 0 ) ->
+                        Decode.map ObjectPoint decodeObjectPoint
 
-                    ( _, True, [], 0 ) ->
-                        Json.Decode.map ObjectEllipse decodeObjectRectangle
+                    ( _, True, [], [], 0 ) ->
+                        Decode.map ObjectEllipse decodeObjectRectangle
 
-                    ( _, _, list, 0 ) ->
-                        Json.Decode.map ObjectPolygon decodeObjectPolygonData
+                    ( _, _, [], list, 0 ) ->
+                        Decode.map ObjectPolyLine (decodeObjectPolygonData "polyline")
 
-                    ( _, _, _, gid ) ->
-                        Json.Decode.map ObjectTile decodeObjectTile
+                    ( _, _, list, [], 0 ) ->
+                        Decode.map ObjectPolygon (decodeObjectPolygonData "polygon")
+
+                    ( _, _, _, _, gid ) ->
+                        Decode.map ObjectTile decodeObjectTile
             )
 
 
@@ -679,6 +591,7 @@ type alias ObjectPolygonData =
     , width : Float
     , x : Float
     , y : Float
+    , properties : DefaultProps
     }
 
 
@@ -690,27 +603,28 @@ type alias ObjectPolygonPoint =
 
 
 {-| -}
-decodeObjectPolygonPoint : Json.Decode.Decoder ObjectPolygonPoint
+decodeObjectPolygonPoint : Decoder ObjectPolygonPoint
 decodeObjectPolygonPoint =
-    Json.Decode.map2 ObjectPolygonPoint
-        (field "x" Json.Decode.float)
-        (field "y" Json.Decode.float)
+    Decode.map2 ObjectPolygonPoint
+        (field "x" Decode.float)
+        (field "y" Decode.float)
 
 
 {-| -}
-decodeObjectPolygonData : Json.Decode.Decoder ObjectPolygonData
-decodeObjectPolygonData =
-    Json.Decode.Pipeline.decode ObjectPolygonData
-        |> required "height" Json.Decode.float
-        |> required "id" Json.Decode.int
-        |> required "name" Json.Decode.string
-        |> required "polygon" (Json.Decode.list decodeObjectPolygonPoint)
-        |> required "rotation" Json.Decode.int
-        |> required "type" Json.Decode.string
-        |> required "visible" Json.Decode.bool
-        |> required "width" Json.Decode.float
-        |> required "x" Json.Decode.float
-        |> required "y" Json.Decode.float
+decodeObjectPolygonData : String -> Decoder ObjectPolygonData
+decodeObjectPolygonData key =
+    Pipeline.decode ObjectPolygonData
+        |> required "height" Decode.float
+        |> required "id" Decode.int
+        |> required "name" Decode.string
+        |> required key (Decode.list decodeObjectPolygonPoint)
+        |> required "rotation" Decode.int
+        |> required "type" Decode.string
+        |> required "visible" Decode.bool
+        |> required "width" Decode.float
+        |> required "x" Decode.float
+        |> required "y" Decode.float
+        |> Pipeline.custom propertiesDecoder
 
 
 {-| -}
@@ -724,22 +638,24 @@ type alias ObjectRectangleData =
     , width : Float
     , x : Float
     , y : Float
+    , properties : DefaultProps
     }
 
 
 {-| -}
-decodeObjectRectangle : Json.Decode.Decoder ObjectRectangleData
+decodeObjectRectangle : Decoder ObjectRectangleData
 decodeObjectRectangle =
-    Json.Decode.Pipeline.decode ObjectRectangleData
-        |> required "height" Json.Decode.float
-        |> required "id" Json.Decode.int
-        |> required "name" Json.Decode.string
-        |> required "rotation" Json.Decode.int
-        |> required "type" Json.Decode.string
-        |> required "visible" Json.Decode.bool
-        |> required "width" Json.Decode.float
-        |> required "x" Json.Decode.float
-        |> required "y" Json.Decode.float
+    Pipeline.decode ObjectRectangleData
+        |> required "height" Decode.float
+        |> required "id" Decode.int
+        |> required "name" Decode.string
+        |> required "rotation" Decode.int
+        |> required "type" Decode.string
+        |> required "visible" Decode.bool
+        |> required "width" Decode.float
+        |> required "x" Decode.float
+        |> required "y" Decode.float
+        |> Pipeline.custom propertiesDecoder
 
 
 {-| -}
@@ -754,23 +670,25 @@ type alias ObjectTileleData =
     , width : Float
     , x : Float
     , y : Float
+    , properties : DefaultProps
     }
 
 
 {-| -}
-decodeObjectTile : Json.Decode.Decoder ObjectTileleData
+decodeObjectTile : Decoder ObjectTileleData
 decodeObjectTile =
-    Json.Decode.Pipeline.decode ObjectTileleData
-        |> required "gid" Json.Decode.int
-        |> required "height" Json.Decode.float
-        |> required "id" Json.Decode.int
-        |> required "name" Json.Decode.string
-        |> required "rotation" Json.Decode.int
-        |> required "type" Json.Decode.string
-        |> required "visible" Json.Decode.bool
-        |> required "width" Json.Decode.float
-        |> required "x" Json.Decode.float
-        |> required "y" Json.Decode.float
+    Pipeline.decode ObjectTileleData
+        |> required "gid" Decode.int
+        |> required "height" Decode.float
+        |> required "id" Decode.int
+        |> required "name" Decode.string
+        |> required "rotation" Decode.int
+        |> required "type" Decode.string
+        |> required "visible" Decode.bool
+        |> required "width" Decode.float
+        |> required "x" Decode.float
+        |> required "y" Decode.float
+        |> Pipeline.custom propertiesDecoder
 
 
 {-| -}
@@ -782,17 +700,19 @@ type alias ObjectPointData =
     , visible : Bool
     , x : Float
     , y : Float
+    , properties : DefaultProps
     }
 
 
 {-| -}
-decodeObjectPoint : Json.Decode.Decoder ObjectPointData
+decodeObjectPoint : Decoder ObjectPointData
 decodeObjectPoint =
-    Json.Decode.Pipeline.decode ObjectPointData
-        |> required "id" Json.Decode.int
-        |> required "name" Json.Decode.string
-        |> required "rotation" Json.Decode.int
-        |> required "type" Json.Decode.string
-        |> required "visible" Json.Decode.bool
-        |> required "x" Json.Decode.float
-        |> required "y" Json.Decode.float
+    Pipeline.decode ObjectPointData
+        |> required "id" Decode.int
+        |> required "name" Decode.string
+        |> required "rotation" Decode.int
+        |> required "type" Decode.string
+        |> required "visible" Decode.bool
+        |> required "x" Decode.float
+        |> required "y" Decode.float
+        |> Pipeline.custom propertiesDecoder

@@ -3,29 +3,37 @@ module Mock exposing (..)
 
 bareMinimum : String
 bareMinimum =
-    """{ "height":1,
+    """{ "height":2,
  "infinite":false,
  "layers":[
         {
-         "data":"AAAAAA==",
+         "data":"AAAAAAAAAAAAAAAAAAAAAA==",
          "encoding":"base64",
-         "height":1,
+         "height":2,
          "name":"Tile Layer 1",
          "opacity":1,
          "type":"tilelayer",
          "visible":true,
-         "width":1,
+         "width":2,
          "x":0,
          "y":0
         }],
  "nextobjectid":1,
  "orientation":"orthogonal",
+ "properties":
+    {
+     "gravity":60
+    },
+ "propertytypes":
+    {
+     "gravity":"float"
+    },
  "renderorder":"right-down",
- "tiledversion":"1.1.2",
- "tileheight":10,
+ "tiledversion":"1.1.3",
+ "tileheight":16,
  "tilesets":[],
- "tilewidth":10,
+ "tilewidth":16,
  "type":"map",
- "version":1.2,
- "width":1
+ "version":1,
+ "width":2
 }"""
