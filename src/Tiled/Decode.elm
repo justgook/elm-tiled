@@ -307,7 +307,7 @@ type alias TilesDataObjectgroup =
 
 
 {-| -}
-decodeTilesData : Decoder { animation : Maybe (List SpriteAnimation), objectgroup : Maybe TilesDataObjectgroup }
+decodeTilesData : Decoder TilesData
 decodeTilesData =
     Decode.map2 (\a b -> { animation = a, objectgroup = b })
         (Decode.maybe (field "animation" (Decode.list decodeSpriteAnimation)))
@@ -546,37 +546,55 @@ type Object
     | ObjectTile ObjectTileleData
 
 
+when : Decoder a -> (a -> Bool) -> Decoder b -> Decoder b
+when checkDecoder expected actualDecoder =
+    -- http://package.elm-lang.org/packages/zwilias/json-decode-exploration/5.0.0/Json-Decode-Exploration#check
+    checkDecoder
+        |> Decode.andThen
+            (\actual ->
+                if expected actual then
+                    actualDecoder
+                else
+                    Decode.fail <|
+                        "Verification failed, expected '"
+                            ++ toString expected
+                            ++ "'."
+            )
+
+
 {-| -}
 decodeObject : Decoder Object
 decodeObject =
-    -- maybe use Pipeline.resolve
-    Pipeline.decode (,,,,)
-        |> optional "point" Decode.bool False
-        |> optional "ellipse" Decode.bool False
-        |> optional "polygon" (Decode.list decodeObjectPolygonPoint) []
-        |> optional "gid" Decode.int 0
-        |> optional "polyline" (Decode.list decodeObjectPolygonPoint) []
-        |> Decode.andThen
-            (\( point, ellipse, polygon, gid, polyline ) ->
-                case ( point, ellipse, polygon, polyline, gid ) of
-                    ( False, False, [], [], 0 ) ->
-                        Decode.map ObjectRectangle decodeObjectRectangle
+    let
+        point =
+            Decode.map ObjectPoint decodeObjectPoint
+                |> when (field "point" Decode.bool) ((==) True)
 
-                    ( True, _, [], [], 0 ) ->
-                        Decode.map ObjectPoint decodeObjectPoint
+        elipse =
+            Decode.map ObjectEllipse decodeObjectRectangle
+                |> when (field "ellipse" Decode.bool) ((==) True)
 
-                    ( _, True, [], [], 0 ) ->
-                        Decode.map ObjectEllipse decodeObjectRectangle
+        polygon =
+            Decode.map ObjectPolygon (decodeObjectPolygonData "polygon")
 
-                    ( _, _, [], list, 0 ) ->
-                        Decode.map ObjectPolyLine (decodeObjectPolygonData "polyline")
+        polyline =
+            Decode.map ObjectPolyLine (decodeObjectPolygonData "polyline")
 
-                    ( _, _, list, [], 0 ) ->
-                        Decode.map ObjectPolygon (decodeObjectPolygonData "polygon")
+        tile =
+            Decode.map ObjectTile decodeObjectTile
+                |> when (field "gid" Decode.int) ((<) 0)
 
-                    ( _, _, _, _, gid ) ->
-                        Decode.map ObjectTile decodeObjectTile
-            )
+        rectangle =
+            Decode.map ObjectRectangle decodeObjectRectangle
+    in
+    Decode.oneOf
+        [ point
+        , elipse
+        , tile
+        , polygon
+        , polyline
+        , rectangle
+        ]
 
 
 {-| -}
