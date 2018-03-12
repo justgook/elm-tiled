@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "summary": "Library for building decoders for Tiled levels.",
+  "summary": "Decoder for Tiled maps (http://www.mapeditor.org/)",
   "repository": "https://github.com/justgook/elm-tiled-decode.git",
   "license": "BSD3",
   "source-directories": [

@@ -1,29 +1,55 @@
 module Tiled.Decode
     exposing
-        ( DefaultProps
+        ( CustomProperties
         , EmbeddedTileData
         , ImageCollectionTileData
+        , ImageCollectionTileDataTile
+        , ImageLayerData
         , Layer(..)
         , Level
         , Object(..)
+        , ObjectLayerData
+        , ObjectPointData
+        , ObjectPolyPoint
+        , ObjectPolygonData
+        , ObjectRectangleData
+        , ObjectTileleData
+        , Orientation(..)
         , Property(..)
+        , RenderOrder(..)
         , SourceTileData
+        , TileLayerData
         , Tileset(..)
         , decode
-        , init
+        , empty
         )
 
-{-| Use the `decode` to get default Level
+{-| Use the [`decode`](#decode) to get [`Level`](#Level)
 
 
 # Default Decoding
 
-@docs init, decode
+@docs decode, empty
+
+##Level
+
+@docs Level, RenderOrder, Orientation
+
+##Layers
+
+@docs Layer, ImageLayerData, TileLayerData, ObjectLayerData
+
+##TileSets
+@docs Tileset, SourceTileData, EmbeddedTileData, ImageCollectionTileData, ImageCollectionTileDataTile
+
+##Objects
+Objects that is used inside [`ObjectLayerData`](#ObjectLayerData)
+@docs Object, ObjectPointData, ObjectRectangleData, ObjectPolygonData, ObjectPolygonData, ObjectTileleData, ObjectPolyPoint
 
 
-# Definition
+# Properties
 
-@docs Level, DefaultProps, Property, Layer, Tileset, Object, SourceTileData, EmbeddedTileData, ImageCollectionTileData
+@docs CustomProperties, Property
 
 -}
 
@@ -38,87 +64,182 @@ import Json.Decode.Pipeline as Pipeline exposing (decode, hardcoded, optional, r
 -- http://eeue56.github.io/json-to-elm/
 
 
-{-| Props that is used for custom props
--}
-type alias DefaultProps =
+{-| -}
+type alias CustomProperties =
     Dict String Property
 
 
-{-| Custom props values
+{-| Custom properties values
 -}
 type Property
     = PropBool Bool
-    | PropColor String
-    | PropFloat Float
-    | PropFile String
     | PropInt Int
+    | PropFloat Float
     | PropString String
+    | PropColor String
+    | PropFile String
 
 
-{-| Extendable structure
-if You would like use custom post parsers looke @decodeWith
+{-|
+
+  - `backgroundcolor` string Hex-formatted color (`#RRGGBB` or `#AARRGGBB`) (default `none`)
+  - `width` Number of tile columns
+  - `height` Number of tile rows
+  - `tilewidth` Map grid width
+  - `tileheight` Map grid height
+  - `infinite` Whether the map has infinite dimensions
+  - `orientation` orthogonal, isometric, staggered or hexagonal
+  - `renderorder` Rendering direction (orthogonal maps only)
+  - `layers` List of layers
+  - `tilesets` List of tilesets
+  - `properties` A list of properties (name, value, type).
+  - `version` The JSON format version
+  - `tiledversion` The Tiled version used to save the file
+
 -}
 type alias Level =
-    { height : Float
+    { backgroundcolor : String
+    , width : Int
+    , height : Int
+    , tilewidth : Int
+    , tileheight : Int
     , infinite : Bool
+    , orientation : Orientation
+    , renderorder : RenderOrder
     , layers : List Layer
-    , nextobjectid : Int
-    , orientation : String
-    , renderorder : String
-    , tiledversion : String
-    , tileheight : Float
     , tilesets : List Tileset
-    , tilewidth : Float
-    , kind : String
+    , properties : CustomProperties
     , version : Float
-    , width : Float
-    , properties : DefaultProps
+    , tiledversion : String
     }
 
 
-{-| -}
-init : Level
-init =
-    { height = 0
+{-| Creates empty [`Level`](#Level)
+-}
+empty : Level
+empty =
+    { backgroundcolor = ""
+    , height = 0
     , infinite = False
     , layers = []
-    , nextobjectid = 0
-    , orientation = ""
-    , renderorder = ""
+    , orientation = Orthogonal
+    , renderorder = RightDown
     , tiledversion = ""
     , tileheight = 0
     , tilesets = []
     , tilewidth = 0
-    , kind = ""
     , version = 0
     , width = 0
     , properties = Dict.empty
     }
 
 
-{-| -}
+{-| Decodes [Tiled](http://www.mapeditor.org/) map (json encoded) to [`Level`](#Level) data structures
+
+    Http.get "path/to/map.json" Tiled.decode
+        |> Http.send LevelLoaded
+
+    update msg model =
+        case msg of
+            LevelLoaded (Ok level) ->
+                ( level, Cmd.none )
+            LevelLoaded (Err err) ->
+                Debug.crash "Tiled Map fail to decode" err
+
+or
+
+    level =
+        case decodeString Tiled.decode "JSON STRING OF MAP" of
+            Ok data ->
+                Debug.log "Tiled Map decoded" data
+
+            Err err ->
+                Debug.crash "Tiled Map fail to decode" err
+
+-}
 decode : Decoder Level
 decode =
     Pipeline.decode Level
-        |> required "height" Decode.float
+        |> optional "backgroundcolor" Decode.string "none"
+        |> required "width" Decode.int
+        |> required "height" Decode.int
+        |> required "tilewidth" Decode.int
+        |> required "tileheight" Decode.int
         |> required "infinite" Decode.bool
+        |> required "orientation" decodeOrientation
+        |> required "renderorder" decodeRenderOrder
         |> required "layers" (Decode.list decodeLayer)
-        |> required "nextobjectid" Decode.int
-        |> required "orientation" Decode.string
-        |> required "renderorder" Decode.string
-        |> required "tiledversion" Decode.string
-        |> required "tileheight" Decode.float
         |> required "tilesets" (Decode.list decodeTileset)
-        |> required "tilewidth" Decode.float
-        |> required "type" Decode.string
-        |> required "version" Decode.float
-        |> required "width" Decode.float
         |> Pipeline.custom propertiesDecoder
+        |> required "version" Decode.float
+        |> required "tiledversion" Decode.string
+
+
+{-| -}
+type RenderOrder
+    = RightDown
+    | RightUp
+    | LeftDown
+    | LeftUp
+
+
+decodeRenderOrder : Decoder RenderOrder
+decodeRenderOrder =
+    Decode.string
+        |> Decode.andThen
+            (\result ->
+                case result of
+                    "right-down" ->
+                        Decode.succeed RightDown
+
+                    "right-up" ->
+                        Decode.succeed RightUp
+
+                    "left-down" ->
+                        Decode.succeed LeftDown
+
+                    "left-up" ->
+                        Decode.succeed LeftUp
+
+                    _ ->
+                        Decode.fail "Unknow render order"
+            )
+
+
+{-| -}
+type Orientation
+    = Orthogonal
+    | Isometric
+    | Staggered
+    | Hexagonal
+
+
+decodeOrientation : Decoder Orientation
+decodeOrientation =
+    Decode.string
+        |> Decode.andThen
+            (\result ->
+                case result of
+                    "orthogonal" ->
+                        Decode.succeed Orthogonal
+
+                    "isometric" ->
+                        Decode.succeed Isometric
+
+                    "staggered" ->
+                        Decode.succeed Staggered
+
+                    "hexagonal" ->
+                        Decode.succeed Hexagonal
+
+                    _ ->
+                        Decode.fail "Unknow orientation"
+            )
 
 
 {-| Decoding properties as Dict String Poperty
 -}
-propertiesDecoder : Decoder DefaultProps
+propertiesDecoder : Decoder CustomProperties
 propertiesDecoder =
     let
         combine : List (Decoder a) -> Decoder (List a)
@@ -173,7 +294,20 @@ type Tileset
     | TilesetImageCollection ImageCollectionTileData
 
 
-{-| -}
+{-|
+
+  - `columns` The number of tile columns in the tileset
+  - `firstgid` GID corresponding to the first tile in the set
+  - `margin` Buffer between image edge and first tile (pixels)
+  - `name` Name given to this tileset
+  - `spacing` Spacing between adjacent tiles in image (pixels)
+  - `tilecount` The number of tiles in this tileset
+  - `tileheight` Maximum height of tiles in this set
+  - `tiles` Dict of [`ImageCollectionTileDataTile`](#ImageCollectionTileDataTile)
+  - `tilewidth` Maximum width of tiles in this set
+  - `properties` A list of properties (name, value, type).
+
+-}
 type alias ImageCollectionTileData =
     { columns : Int
     , firstgid : Int
@@ -182,8 +316,9 @@ type alias ImageCollectionTileData =
     , spacing : Int
     , tilecount : Int
     , tileheight : Int
-    , tiles : ImageCollectionTileDataTiles
+    , tiles : Dict Int ImageCollectionTileDataTile
     , tilewidth : Int
+    , properties : CustomProperties
     }
 
 
@@ -193,11 +328,6 @@ type alias ImageCollectionTileDataTile =
     , imageheight : Int
     , imagewidth : Int
     }
-
-
-{-| -}
-type alias ImageCollectionTileDataTiles =
-    Dict Int ImageCollectionTileDataTile
 
 
 {-| -}
@@ -213,6 +343,7 @@ decodeImageCollectionTileData =
         |> Pipeline.required "tileheight" Decode.int
         |> Pipeline.required "tiles" decodeImageCollectionTileDataTiles
         |> Pipeline.required "tilewidth" Decode.int
+        |> Pipeline.custom propertiesDecoder
         |> Decode.map TilesetImageCollection
 
 
@@ -265,7 +396,23 @@ decodeSourceTileset =
         |> Decode.map TilesetSource
 
 
-{-| -}
+{-|
+
+  - `columns` The number of tile columns in the tileset
+  - `firstgid` GID corresponding to the first tile in the set
+  - `image` Image used for tiles in this set
+  - `imagewidth` Width of source image in pixels
+  - `imageheight` Height of source image in pixels
+  - `margin` Buffer between image edge and first tile (pixels)
+  - `name` Name given to this tileset
+  - `spacing` Spacing between adjacent tiles in image (pixels)
+  - `tilecount` The number of tiles in this tileset
+  - `tileheight` Maximum height of tiles in this set
+  - `tiles` Dict of TilesData [`TilesData`](#TilesData)
+  - `tilewidth` Maximum width of tiles in this set
+  - `properties` A list of properties (name, value, type).
+
+-}
 type alias EmbeddedTileData =
     { columns : Int
     , firstgid : Int
@@ -280,7 +427,7 @@ type alias EmbeddedTileData =
     , tilewidth : Int
     , transparentcolor : String
     , tiles : Dict Int TilesData
-    , properties : DefaultProps
+    , properties : CustomProperties
     }
 
 
@@ -328,10 +475,6 @@ type alias TilesData =
     TilesDataPlain {}
 
 
-
--- | TilesDataImage
-
-
 {-| -}
 type alias TilesDataPlain a =
     { a
@@ -342,11 +485,10 @@ type alias TilesDataPlain a =
 
 {-| -}
 type alias TilesDataObjectgroup =
-    { draworder : String
+    { draworder : RenderOrder
     , name : String
     , objects : List Object
     , opacity : Int
-    , kind : String
     , visible : Bool
     , x : Int
     , y : Int
@@ -374,11 +516,10 @@ decodeTilesDataNew =
 decodeTilesDataObjectgroup : Decoder TilesDataObjectgroup
 decodeTilesDataObjectgroup =
     Pipeline.decode TilesDataObjectgroup
-        |> Pipeline.required "draworder" Decode.string
+        |> Pipeline.required "draworder" decodeRenderOrder
         |> Pipeline.required "name" Decode.string
         |> Pipeline.required "objects" (Decode.list decodeObject)
         |> Pipeline.required "opacity" Decode.int
-        |> Pipeline.required "type" Decode.string
         |> Pipeline.required "visible" Decode.bool
         |> Pipeline.required "x" Decode.int
         |> Pipeline.required "y" Decode.int
@@ -406,46 +547,76 @@ type Layer
     | ObjectLayer ObjectLayerData
 
 
-{-| -}
+{-|
+
+  - `image` - Image used as background
+  - `name` Name assigned to this layer
+  - `x` Horizontal layer offset in tiles. Always 0.
+  - `y` Vertical layer offset in tiles. Always 0.
+  - `opacity` Value between 0 and 1
+  - `properties` A list of properties (name, value, type).
+  - `visible` Whether layer is shown or hidden in editor
+
+-}
 type alias ImageLayerData =
     { image : String
     , name : String
     , opacity : Float
-    , kind : String
     , visible : Bool
     , x : Float
     , y : Float
     , transparentcolor : String
-    , properties : DefaultProps
+    , properties : CustomProperties
     }
 
 
-{-| -}
+{-|
+
+  - `data` List of GIDs. [tilelayer](#TileLayerData) only.
+  - `name` Name assigned to this layer
+  - `x` Horizontal layer offset in tiles. Always 0.
+  - `y` Vertical layer offset in tiles. Always 0.
+  - `width` Column count. Same as map width for fixed-size maps.
+  - `height` Row count. Same as map height for fixed-size maps.
+  - `opacity` Value between 0 and 1
+  - `properties` A list of properties (name, value, type).
+  - `visible` Whether layer is shown or hidden in editor
+
+-}
 type alias TileLayerData =
     { data : List Int
-    , height : Float
+    , height : Int
     , name : String
     , opacity : Float
-    , kind : String
     , visible : Bool
     , width : Float
     , x : Float
     , y : Float
-    , properties : DefaultProps
+    , properties : CustomProperties
     }
 
 
-{-| -}
+{-|
+
+  - `name` Name assigned to this layer
+  - `x` Horizontal layer offset in tiles. Always 0.
+  - `y` Vertical layer offset in tiles. Always 0.
+  - `draworder` [`TopDown`](#RenderOrder) (default)
+  - `objects` List of objects. objectgroup only.
+  - `opacity` Value between 0 and 1
+  - `properties` A list of properties (name, value, type).
+  - `visible` Whether layer is shown or hidden in editor
+
+-}
 type alias ObjectLayerData =
-    { draworder : String
+    { draworder : RenderOrder
     , name : String
     , objects : List Object
     , opacity : Float
-    , kind : String
     , visible : Bool
-    , x : Int
-    , y : Int
-    , properties : DefaultProps
+    , x : Float
+    , y : Float
+    , properties : CustomProperties
     }
 
 
@@ -480,7 +651,6 @@ decodeImageLayer =
         |> required "image" Decode.string
         |> required "name" Decode.string
         |> required "opacity" Decode.float
-        |> required "type" Decode.string
         |> required "visible" Decode.bool
         |> required "x" Decode.float
         |> required "y" Decode.float
@@ -498,10 +668,9 @@ decodeTileLayer =
             (\( encoding, compression ) ->
                 Pipeline.decode TileLayerData
                     |> required "data" (decodeTileLayerData encoding compression)
-                    |> required "height" Decode.float
+                    |> required "height" Decode.int
                     |> required "name" Decode.string
                     |> required "opacity" Decode.float
-                    |> required "type" Decode.string
                     |> required "visible" Decode.bool
                     |> required "width" Decode.float
                     |> required "x" Decode.float
@@ -572,23 +741,22 @@ resultExtract f x =
 decodeObjectLayer : Decoder ObjectLayerData
 decodeObjectLayer =
     Pipeline.decode ObjectLayerData
-        |> required "draworder" Decode.string
+        |> required "draworder" decodeRenderOrder
         |> required "name" Decode.string
         |> required "objects" (Decode.list decodeObject)
         |> required "opacity" Decode.float
-        |> required "type" Decode.string
         |> required "visible" Decode.bool
-        |> required "x" Decode.int
-        |> required "y" Decode.int
+        |> required "x" Decode.float
+        |> required "y" Decode.float
         |> Pipeline.custom propertiesDecoder
 
 
 {-| -}
 type Object
-    = ObjectRectangle ObjectRectangleData
-    | ObjectPoint ObjectPointData
-    | ObjectPolygon ObjectPolygonData
+    = ObjectPoint ObjectPointData
+    | ObjectRectangle ObjectRectangleData
     | ObjectEllipse ObjectRectangleData
+    | ObjectPolygon ObjectPolygonData
     | ObjectPolyLine ObjectPolygonData
     | ObjectTile ObjectTileleData
 
@@ -649,28 +817,27 @@ type alias ObjectPolygonData =
     { height : Float
     , id : Int
     , name : String
-    , polygon : List ObjectPolygonPoint
+    , polygon : List ObjectPolyPoint
     , rotation : Float
-    , kind : String
     , visible : Bool
     , width : Float
     , x : Float
     , y : Float
-    , properties : DefaultProps
+    , properties : CustomProperties
     }
 
 
 {-| -}
-type alias ObjectPolygonPoint =
+type alias ObjectPolyPoint =
     { x : Float
     , y : Float
     }
 
 
 {-| -}
-decodeObjectPolygonPoint : Decoder ObjectPolygonPoint
-decodeObjectPolygonPoint =
-    Decode.map2 ObjectPolygonPoint
+decodeObjectPolyPoint : Decoder ObjectPolyPoint
+decodeObjectPolyPoint =
+    Decode.map2 ObjectPolyPoint
         (field "x" Decode.float)
         (field "y" Decode.float)
 
@@ -682,9 +849,8 @@ decodeObjectPolygonData key =
         |> required "height" Decode.float
         |> required "id" Decode.int
         |> required "name" Decode.string
-        |> required key (Decode.list decodeObjectPolygonPoint)
+        |> required key (Decode.list decodeObjectPolyPoint)
         |> required "rotation" Decode.float
-        |> required "type" Decode.string
         |> required "visible" Decode.bool
         |> required "width" Decode.float
         |> required "x" Decode.float
@@ -698,12 +864,11 @@ type alias ObjectRectangleData =
     , id : Int
     , name : String
     , rotation : Float
-    , kind : String
     , visible : Bool
     , width : Float
     , x : Float
     , y : Float
-    , properties : DefaultProps
+    , properties : CustomProperties
     }
 
 
@@ -715,7 +880,6 @@ decodeObjectRectangle =
         |> required "id" Decode.int
         |> required "name" Decode.string
         |> required "rotation" Decode.float
-        |> required "type" Decode.string
         |> required "visible" Decode.bool
         |> required "width" Decode.float
         |> required "x" Decode.float
@@ -730,12 +894,11 @@ type alias ObjectTileleData =
     , id : Int
     , name : String
     , rotation : Float
-    , kind : String
     , visible : Bool
-    , width : Float
+    , width : Int
     , x : Float
     , y : Float
-    , properties : DefaultProps
+    , properties : CustomProperties
     }
 
 
@@ -748,9 +911,8 @@ decodeObjectTile =
         |> required "id" Decode.int
         |> required "name" Decode.string
         |> required "rotation" Decode.float
-        |> required "type" Decode.string
         |> required "visible" Decode.bool
-        |> required "width" Decode.float
+        |> required "width" Decode.int
         |> required "x" Decode.float
         |> required "y" Decode.float
         |> Pipeline.custom propertiesDecoder
@@ -761,11 +923,10 @@ type alias ObjectPointData =
     { id : Int
     , name : String
     , rotation : Float
-    , kind : String
     , visible : Bool
     , x : Float
     , y : Float
-    , properties : DefaultProps
+    , properties : CustomProperties
     }
 
 
@@ -776,7 +937,6 @@ decodeObjectPoint =
         |> required "id" Decode.int
         |> required "name" Decode.string
         |> required "rotation" Decode.float
-        |> required "type" Decode.string
         |> required "visible" Decode.bool
         |> required "x" Decode.float
         |> required "y" Decode.float
