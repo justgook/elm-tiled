@@ -2,19 +2,18 @@ module Tiled.Decode
     exposing
         ( DefaultProps
         , EmbeddedTileData
+        , ImageCollectionTileData
         , Layer(..)
-        , LevelWith
+        , Level
         , Object(..)
-        , Options
         , Property(..)
+        , SourceTileData
         , Tileset(..)
         , decode
-        , decodeWith
-        , defaultOptions
         , init
         )
 
-{-| Use the `decode` to get default Level or `decodeWith` to get custom decoding version
+{-| Use the `decode` to get default Level
 
 
 # Default Decoding
@@ -22,14 +21,9 @@ module Tiled.Decode
 @docs init, decode
 
 
-# Custom Decoding
-
-@docs decodeWith, defaultOptions
-
-
 # Definition
 
-@docs DefaultProps, LevelWith, Property,EmbeddedTileData, Layer, Tileset,Options, Object
+@docs Level, DefaultProps, Property, Layer, Tileset, Object, SourceTileData, EmbeddedTileData, ImageCollectionTileData
 
 -}
 
@@ -64,16 +58,16 @@ type Property
 {-| Extendable structure
 if You would like use custom post parsers looke @decodeWith
 -}
-type alias LevelWith layer tileset =
+type alias Level =
     { height : Float
     , infinite : Bool
-    , layers : List layer
+    , layers : List Layer
     , nextobjectid : Int
     , orientation : String
     , renderorder : String
     , tiledversion : String
     , tileheight : Float
-    , tilesets : List tileset
+    , tilesets : List Tileset
     , tilewidth : Float
     , kind : String
     , version : Float
@@ -83,7 +77,7 @@ type alias LevelWith layer tileset =
 
 
 {-| -}
-init : LevelWith layer tileset
+init : Level
 init =
     { height = 0
     , infinite = False
@@ -103,40 +97,18 @@ init =
 
 
 {-| -}
-type alias Options layer tileset =
-    { postLayer : Layer -> Decoder layer
-    , postTilest : Tileset -> Decoder tileset
-    }
-
-
-{-| -}
-defaultOptions : { postLayer : layer -> Decoder layer, postTilest : tileset -> Decoder tileset }
-defaultOptions =
-    { postLayer = Decode.succeed
-    , postTilest = Decode.succeed
-    }
-
-
-{-| -}
-decode : Decoder (LevelWith Layer Tileset)
+decode : Decoder Level
 decode =
-    decodeWith defaultOptions
-
-
-{-| Custom decoder
--}
-decodeWith : Options layer tileset -> Decoder (LevelWith layer tileset)
-decodeWith opts =
-    Pipeline.decode LevelWith
+    Pipeline.decode Level
         |> required "height" Decode.float
         |> required "infinite" Decode.bool
-        |> required "layers" (decodeLayer |> Decode.andThen opts.postLayer |> Decode.list)
+        |> required "layers" (Decode.list decodeLayer)
         |> required "nextobjectid" Decode.int
         |> required "orientation" Decode.string
         |> required "renderorder" Decode.string
         |> required "tiledversion" Decode.string
         |> required "tileheight" Decode.float
-        |> required "tilesets" (decodeTileset |> Decode.andThen opts.postTilest |> Decode.list)
+        |> required "tilesets" (Decode.list decodeTileset)
         |> required "tilewidth" Decode.float
         |> required "type" Decode.string
         |> required "version" Decode.float
