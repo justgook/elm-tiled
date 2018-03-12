@@ -1,6 +1,7 @@
 module Tiled.Decode
     exposing
         ( CustomProperties
+        , DrawOrder
         , EmbeddedTileData
         , ImageCollectionTileData
         , ImageCollectionTileDataTile
@@ -33,7 +34,7 @@ module Tiled.Decode
 
 ##Level
 
-@docs Level, RenderOrder, Orientation
+@docs Level, Orientation
 
 ##Layers
 
@@ -49,7 +50,7 @@ Objects that is used inside [`ObjectLayerData`](#ObjectLayerData)
 
 # Properties
 
-@docs CustomProperties, Property
+@docs CustomProperties, Property, RenderOrder, DrawOrder
 
 -}
 
@@ -206,6 +207,7 @@ decodeRenderOrder =
             )
 
 
+{-| -}
 type DrawOrder
     = TopDown
     | Index
