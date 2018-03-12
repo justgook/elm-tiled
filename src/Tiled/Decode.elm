@@ -198,12 +198,83 @@ propertiesDecoder =
 type Tileset
     = TilesetSource SourceTileData
     | TilesetEmbedded EmbeddedTileData
+    | TilesetImageCollection ImageCollectionTileData
+
+
+{-| -}
+type alias ImageCollectionTileData =
+    { columns : Int
+    , firstgid : Int
+    , margin : Int
+    , name : String
+    , spacing : Int
+    , tilecount : Int
+    , tileheight : Int
+    , tiles : ImageCollectionTileDataTiles
+    , tilewidth : Int
+    }
+
+
+{-| -}
+type alias ImageCollectionTileDataTile =
+    { image : String
+    , imageheight : Int
+    , imagewidth : Int
+    }
+
+
+{-| -}
+type alias ImageCollectionTileDataTiles =
+    Dict Int ImageCollectionTileDataTile
+
+
+{-| -}
+decodeImageCollectionTileData : Decode.Decoder Tileset
+decodeImageCollectionTileData =
+    Pipeline.decode ImageCollectionTileData
+        |> Pipeline.required "columns" Decode.int
+        |> Pipeline.required "firstgid" Decode.int
+        |> Pipeline.required "margin" Decode.int
+        |> Pipeline.required "name" Decode.string
+        |> Pipeline.required "spacing" Decode.int
+        |> Pipeline.required "tilecount" Decode.int
+        |> Pipeline.required "tileheight" Decode.int
+        |> Pipeline.required "tiles" decodeImageCollectionTileDataTiles
+        |> Pipeline.required "tilewidth" Decode.int
+        |> Decode.map TilesetImageCollection
+
+
+{-| -}
+decodeImageCollectionTileDataTiles : Decoder (Dict Int ImageCollectionTileDataTile)
+decodeImageCollectionTileDataTiles =
+    Decode.keyValuePairs decodeImageCollectionTileDataTile
+        |> Decode.andThen
+            (List.foldl
+                (\( i, data ) acc ->
+                    case String.toInt i of
+                        Ok index ->
+                            acc |> Decode.andThen (Dict.insert index data >> Decode.succeed)
+
+                        Err a ->
+                            Decode.fail a
+                )
+                (Decode.succeed Dict.empty)
+            )
+
+
+{-| -}
+decodeImageCollectionTileDataTile : Decode.Decoder ImageCollectionTileDataTile
+decodeImageCollectionTileDataTile =
+    Decode.map3 ImageCollectionTileDataTile
+        (field "image" Decode.string)
+        (field "imageheight" Decode.int)
+        (field "imagewidth" Decode.int)
 
 
 {-| -}
 decodeTileset : Decoder Tileset
 decodeTileset =
-    Decode.oneOf [ decodeEmbeddedTileset, decodeSourceTileset ]
+    Decode.oneOf [ decodeEmbeddedTileset, decodeSourceTileset, decodeImageCollectionTileData ]
 
 
 {-| -}
@@ -256,7 +327,7 @@ decodeEmbeddedTileset =
         |> required "tilecount" Decode.int
         |> required "tileheight" Decode.int
         |> required "tilewidth" Decode.int
-        |> required "transparentcolor" Decode.string
+        |> optional "transparentcolor" Decode.string "none"
         |> optional "tiles" decodeTiles Dict.empty
         |> Pipeline.custom propertiesDecoder
         |> Decode.map TilesetEmbedded
@@ -283,6 +354,10 @@ decodeTiles =
 {-| -}
 type alias TilesData =
     TilesDataPlain {}
+
+
+
+-- | TilesDataImage
 
 
 {-| -}
@@ -603,7 +678,7 @@ type alias ObjectPolygonData =
     , id : Int
     , name : String
     , polygon : List ObjectPolygonPoint
-    , rotation : Int
+    , rotation : Float
     , kind : String
     , visible : Bool
     , width : Float
@@ -636,7 +711,7 @@ decodeObjectPolygonData key =
         |> required "id" Decode.int
         |> required "name" Decode.string
         |> required key (Decode.list decodeObjectPolygonPoint)
-        |> required "rotation" Decode.int
+        |> required "rotation" Decode.float
         |> required "type" Decode.string
         |> required "visible" Decode.bool
         |> required "width" Decode.float
@@ -650,7 +725,7 @@ type alias ObjectRectangleData =
     { height : Float
     , id : Int
     , name : String
-    , rotation : Int
+    , rotation : Float
     , kind : String
     , visible : Bool
     , width : Float
@@ -667,7 +742,7 @@ decodeObjectRectangle =
         |> required "height" Decode.float
         |> required "id" Decode.int
         |> required "name" Decode.string
-        |> required "rotation" Decode.int
+        |> required "rotation" Decode.float
         |> required "type" Decode.string
         |> required "visible" Decode.bool
         |> required "width" Decode.float
@@ -682,7 +757,7 @@ type alias ObjectTileleData =
     , height : Float
     , id : Int
     , name : String
-    , rotation : Int
+    , rotation : Float
     , kind : String
     , visible : Bool
     , width : Float
@@ -700,7 +775,7 @@ decodeObjectTile =
         |> required "height" Decode.float
         |> required "id" Decode.int
         |> required "name" Decode.string
-        |> required "rotation" Decode.int
+        |> required "rotation" Decode.float
         |> required "type" Decode.string
         |> required "visible" Decode.bool
         |> required "width" Decode.float
@@ -713,7 +788,7 @@ decodeObjectTile =
 type alias ObjectPointData =
     { id : Int
     , name : String
-    , rotation : Int
+    , rotation : Float
     , kind : String
     , visible : Bool
     , x : Float
@@ -728,7 +803,7 @@ decodeObjectPoint =
     Pipeline.decode ObjectPointData
         |> required "id" Decode.int
         |> required "name" Decode.string
-        |> required "rotation" Decode.int
+        |> required "rotation" Decode.float
         |> required "type" Decode.string
         |> required "visible" Decode.bool
         |> required "x" Decode.float
