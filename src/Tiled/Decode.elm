@@ -1,7 +1,7 @@
 module Tiled.Decode
     exposing
         ( CustomProperties
-        , DrawOrder
+        , DrawOrder(..)
         , EmbeddedTileData
         , ImageCollectionTileData
         , ImageCollectionTileDataTile
