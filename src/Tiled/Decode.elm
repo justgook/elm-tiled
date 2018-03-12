@@ -13,7 +13,7 @@ module Tiled.Decode
         , ObjectPolyPoint
         , ObjectPolygonData
         , ObjectRectangleData
-        , ObjectTileleData
+        , ObjectTileData
         , Orientation(..)
         , Property(..)
         , RenderOrder(..)
@@ -44,7 +44,7 @@ module Tiled.Decode
 
 ##Objects
 Objects that is used inside [`ObjectLayerData`](#ObjectLayerData)
-@docs Object, ObjectPointData, ObjectRectangleData, ObjectPolygonData, ObjectPolygonData, ObjectTileleData, ObjectPolyPoint
+@docs Object, ObjectPointData, ObjectRectangleData, ObjectPolygonData, ObjectPolygonData, ObjectTileData, ObjectPolyPoint
 
 
 # Properties
@@ -203,6 +203,28 @@ decodeRenderOrder =
 
                     _ ->
                         Decode.fail "Unknow render order"
+            )
+
+
+type DrawOrder
+    = TopDown
+    | Index
+
+
+decodeDrawOrder : Decoder DrawOrder
+decodeDrawOrder =
+    Decode.string
+        |> Decode.andThen
+            (\result ->
+                case result of
+                    "topdown" ->
+                        Decode.succeed TopDown
+
+                    "index" ->
+                        Decode.succeed Index
+
+                    _ ->
+                        Decode.fail "Unknow draw order"
             )
 
 
@@ -485,7 +507,7 @@ type alias TilesDataPlain a =
 
 {-| -}
 type alias TilesDataObjectgroup =
-    { draworder : RenderOrder
+    { draworder : DrawOrder
     , name : String
     , objects : List Object
     , opacity : Int
@@ -516,7 +538,7 @@ decodeTilesDataNew =
 decodeTilesDataObjectgroup : Decoder TilesDataObjectgroup
 decodeTilesDataObjectgroup =
     Pipeline.decode TilesDataObjectgroup
-        |> Pipeline.required "draworder" decodeRenderOrder
+        |> Pipeline.required "draworder" decodeDrawOrder
         |> Pipeline.required "name" Decode.string
         |> Pipeline.required "objects" (Decode.list decodeObject)
         |> Pipeline.required "opacity" Decode.int
@@ -589,7 +611,7 @@ type alias TileLayerData =
     , name : String
     , opacity : Float
     , visible : Bool
-    , width : Float
+    , width : Int
     , x : Float
     , y : Float
     , properties : CustomProperties
@@ -601,7 +623,7 @@ type alias TileLayerData =
   - `name` Name assigned to this layer
   - `x` Horizontal layer offset in tiles. Always 0.
   - `y` Vertical layer offset in tiles. Always 0.
-  - `draworder` [`TopDown`](#RenderOrder) (default)
+  - `draworder` [`TopDown`](#DrawOrder) (default)
   - `objects` List of objects. objectgroup only.
   - `opacity` Value between 0 and 1
   - `properties` A list of properties (name, value, type).
@@ -609,7 +631,7 @@ type alias TileLayerData =
 
 -}
 type alias ObjectLayerData =
-    { draworder : RenderOrder
+    { draworder : DrawOrder
     , name : String
     , objects : List Object
     , opacity : Float
@@ -672,7 +694,7 @@ decodeTileLayer =
                     |> required "name" Decode.string
                     |> required "opacity" Decode.float
                     |> required "visible" Decode.bool
-                    |> required "width" Decode.float
+                    |> required "width" Decode.int
                     |> required "x" Decode.float
                     |> required "y" Decode.float
                     |> Pipeline.custom propertiesDecoder
@@ -741,7 +763,7 @@ resultExtract f x =
 decodeObjectLayer : Decoder ObjectLayerData
 decodeObjectLayer =
     Pipeline.decode ObjectLayerData
-        |> required "draworder" decodeRenderOrder
+        |> required "draworder" decodeDrawOrder
         |> required "name" Decode.string
         |> required "objects" (Decode.list decodeObject)
         |> required "opacity" Decode.float
@@ -758,7 +780,7 @@ type Object
     | ObjectEllipse ObjectRectangleData
     | ObjectPolygon ObjectPolygonData
     | ObjectPolyLine ObjectPolygonData
-    | ObjectTile ObjectTileleData
+    | ObjectTile ObjectTileData
 
 
 when : Decoder a -> (a -> Bool) -> Decoder b -> Decoder b
@@ -819,6 +841,7 @@ type alias ObjectPolygonData =
     , name : String
     , polygon : List ObjectPolyPoint
     , rotation : Float
+    , kind : String
     , visible : Bool
     , width : Float
     , x : Float
@@ -851,6 +874,7 @@ decodeObjectPolygonData key =
         |> required "name" Decode.string
         |> required key (Decode.list decodeObjectPolyPoint)
         |> required "rotation" Decode.float
+        |> required "type" Decode.string
         |> required "visible" Decode.bool
         |> required "width" Decode.float
         |> required "x" Decode.float
@@ -864,6 +888,7 @@ type alias ObjectRectangleData =
     , id : Int
     , name : String
     , rotation : Float
+    , kind : String
     , visible : Bool
     , width : Float
     , x : Float
@@ -880,6 +905,7 @@ decodeObjectRectangle =
         |> required "id" Decode.int
         |> required "name" Decode.string
         |> required "rotation" Decode.float
+        |> required "type" Decode.string
         |> required "visible" Decode.bool
         |> required "width" Decode.float
         |> required "x" Decode.float
@@ -888,14 +914,15 @@ decodeObjectRectangle =
 
 
 {-| -}
-type alias ObjectTileleData =
+type alias ObjectTileData =
     { gid : Int
     , height : Float
     , id : Int
     , name : String
     , rotation : Float
+    , kind : String
     , visible : Bool
-    , width : Int
+    , width : Float
     , x : Float
     , y : Float
     , properties : CustomProperties
@@ -903,16 +930,17 @@ type alias ObjectTileleData =
 
 
 {-| -}
-decodeObjectTile : Decoder ObjectTileleData
+decodeObjectTile : Decoder ObjectTileData
 decodeObjectTile =
-    Pipeline.decode ObjectTileleData
+    Pipeline.decode ObjectTileData
         |> required "gid" Decode.int
         |> required "height" Decode.float
         |> required "id" Decode.int
         |> required "name" Decode.string
         |> required "rotation" Decode.float
+        |> required "type" Decode.string
         |> required "visible" Decode.bool
-        |> required "width" Decode.int
+        |> required "width" Decode.float
         |> required "x" Decode.float
         |> required "y" Decode.float
         |> Pipeline.custom propertiesDecoder
@@ -923,6 +951,7 @@ type alias ObjectPointData =
     { id : Int
     , name : String
     , rotation : Float
+    , kind : String
     , visible : Bool
     , x : Float
     , y : Float
@@ -937,6 +966,7 @@ decodeObjectPoint =
         |> required "id" Decode.int
         |> required "name" Decode.string
         |> required "rotation" Decode.float
+        |> required "type" Decode.string
         |> required "visible" Decode.bool
         |> required "x" Decode.float
         |> required "y" Decode.float
