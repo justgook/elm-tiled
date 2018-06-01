@@ -23,7 +23,11 @@ module Tiled.Decode
         , Tileset(..)
         , decode
         , empty
+        , decodeTileset
+        , decodeTiles
+        , TilesData
         )
+
 {-| Use the [`decode`](#decode) to get [`Level`](#Level)
 
 
@@ -40,7 +44,7 @@ module Tiled.Decode
 @docs Layer, ImageLayerData, TileLayerData, ObjectLayerData
 
 ##TileSets
-@docs Tileset, SourceTileData, EmbeddedTileData, ImageCollectionTileData, ImageCollectionTileDataTile
+@docs Tileset, SourceTileData, EmbeddedTileData, ImageCollectionTileData, ImageCollectionTileDataTile, TilesData
 
 ##Objects
 Objects that is used inside [`ObjectLayerData`](#ObjectLayerData)
@@ -50,6 +54,10 @@ Objects that is used inside [`ObjectLayerData`](#ObjectLayerData)
 # Properties
 
 @docs CustomProperties, Property, RenderOrder, DrawOrder
+
+##Sub-decoders
+
+@docs decodeTileset, decodeTiles
 
 -}
 
@@ -95,7 +103,6 @@ type Property
   - `properties` A list of properties (name, value, type).
   - `version` The JSON format version
   - `tiledversion` The Tiled version used to save the file
-
 -}
 type alias Level =
     { backgroundcolor : String
@@ -260,6 +267,8 @@ decodeOrientation =
             )
 
 
+{-| Tiles in teleset
+-}
 decodeTiles : Decoder (Dict Int TilesData)
 decodeTiles =
     let
@@ -302,11 +311,11 @@ decodeTiles =
                                                             v2
                                                             (Decode.succeed Dict.empty)
                                                 in
-                                                result
-                                                    |> Decode.andThen
-                                                        (\asd ->
-                                                            aAAAA |> Dict.insert index asd >> Decode.succeed
-                                                        )
+                                                    result
+                                                        |> Decode.andThen
+                                                            (\asd ->
+                                                                aAAAA |> Dict.insert index asd >> Decode.succeed
+                                                            )
                                             )
 
                                 Err a ->
@@ -361,11 +370,9 @@ decodeTiles =
                     )
                 |> Decode.field "tiles"
     in
-    Decode.oneOf [ old, new ]
-        |> Decode.maybe
-        |> Decode.map (Maybe.withDefault Dict.empty)
-
-
+        Decode.oneOf [ new, old ]
+            |> Decode.maybe
+            |> Decode.map (Maybe.withDefault Dict.empty)
 
 
 {-| -}
@@ -416,9 +423,7 @@ propertiesDecoderWith_Old ( properties, propertytypes ) =
                 |> Decode.andThen combine
                 |> Decode.map Dict.fromList
     in
-    propertiesDecoder
-        |> Decode.maybe
-        |> Decode.map (Maybe.withDefault Dict.empty)
+        propertiesDecoder
 
 
 propertiesDecoder_New : Decoder (Dict String Property)
@@ -436,13 +441,13 @@ propertiesDecoder_New =
             )
             |> Decode.map Dict.fromList
         )
-        |> Decode.maybe
-        |> Decode.map (Maybe.withDefault Dict.empty)
 
 
 propertiesDecoderWith : ( String, String ) -> Decoder (Dict String Property)
 propertiesDecoderWith ( properties, propertytypes ) =
     Decode.oneOf [ propertiesDecoder_New, propertiesDecoderWith_Old ( properties, propertytypes ) ]
+        |> Decode.maybe
+        |> Decode.map (Maybe.withDefault Dict.empty)
 
 
 {-| Decoding properties as Dict String Poperty
@@ -471,7 +476,6 @@ type Tileset
   - `tiles` Dict of [`ImageCollectionTileDataTile`](#ImageCollectionTileDataTile)
   - `tilewidth` Maximum width of tiles in this set
   - `properties` A list of properties (name, value, type).
-
 -}
 type alias ImageCollectionTileData =
     { columns : Int
@@ -576,7 +580,6 @@ decodeSourceTileset =
   - `tiles` Dict of TilesData [`TilesData`](#TilesData)
   - `tilewidth` Maximum width of tiles in this set
   - `properties` A list of properties (name, value, type).
-
 -}
 type alias EmbeddedTileData =
     { columns : Int
@@ -618,7 +621,12 @@ decodeEmbeddedTileset =
         |> Decode.map TilesetEmbedded
 
 
-{-| -}
+{-|
+
+    - `animation` : Maybe (List SpriteAnimation)
+    - `objectgroup` : Maybe TilesDataObjectgroup
+    - `properties` : CustomProperties
+-}
 type alias TilesData =
     TilesDataPlain {}
 
@@ -650,7 +658,7 @@ decodeTilesDataNew =
     Decode.map4 (\a b c d -> { animation = a, objectgroup = b, properties = c, id = d })
         (Decode.maybe (field "animation" (Decode.list decodeSpriteAnimation)))
         (Decode.maybe (field "objectgroup" decodeTilesDataObjectgroup))
-        propertiesDecoder_New
+        (Decode.maybe propertiesDecoder_New |> Decode.map (Maybe.withDefault Dict.empty))
         (field "id" Decode.int)
 
 
@@ -698,7 +706,6 @@ type Layer
   - `opacity` Value between 0 and 1
   - `properties` A list of properties (name, value, type).
   - `visible` Whether layer is shown or hidden in editor
-
 -}
 type alias ImageLayerData =
     { image : String
@@ -723,7 +730,6 @@ type alias ImageLayerData =
   - `opacity` Value between 0 and 1
   - `properties` A list of properties (name, value, type).
   - `visible` Whether layer is shown or hidden in editor
-
 -}
 type alias TileLayerData =
     { data : List Int
@@ -748,7 +754,6 @@ type alias TileLayerData =
   - `opacity` Value between 0 and 1
   - `properties` A list of properties (name, value, type).
   - `visible` Whether layer is shown or hidden in editor
-
 -}
 type alias ObjectLayerData =
     { draworder : DrawOrder
@@ -857,10 +862,10 @@ convertTilesData octets =
                     )
                     0
     in
-    if List.isEmpty rest then
-        [ value ]
-    else
-        value :: convertTilesData rest
+        if List.isEmpty rest then
+            [ value ]
+        else
+            value :: convertTilesData rest
 
 
 zip : List a -> List b -> List ( a, b )
@@ -944,14 +949,14 @@ decodeObject =
         rectangle =
             Decode.map ObjectRectangle decodeObjectRectangle
     in
-    Decode.oneOf
-        [ point
-        , elipse
-        , tile
-        , polygon
-        , polyline
-        , rectangle
-        ]
+        Decode.oneOf
+            [ point
+            , elipse
+            , tile
+            , polygon
+            , polyline
+            , rectangle
+            ]
 
 
 {-| -}
