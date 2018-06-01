@@ -24,7 +24,6 @@ module Tiled.Decode
         , decode
         , empty
         )
-
 {-| Use the [`decode`](#decode) to get [`Level`](#Level)
 
 
@@ -261,54 +260,196 @@ decodeOrientation =
             )
 
 
-{-| Decoding properties as Dict String Poperty
+decodeTiles : Decoder (Dict Int TilesData)
+decodeTiles =
+    let
+        decodeTilesData_Old =
+            Decode.map2 (\a b -> { animation = a, objectgroup = b })
+                (Decode.maybe (field "animation" (Decode.list decodeSpriteAnimation)))
+                (Decode.maybe (field "objectgroup" decodeTilesDataObjectgroup))
+
+        doNothing a b c =
+            c
+
+        mergeIfBoth f a b c =
+            Dict.merge doNothing f doNothing a b c
+
+        old =
+            Decode.map3
+                (\tileproperties tilepropertytypes tiles ->
+                    mergeIfBoth
+                        (\i v1 v2 acc ->
+                            case String.toInt i of
+                                Ok index ->
+                                    acc
+                                        |> Decode.andThen
+                                            (\aAAAA ->
+                                                let
+                                                    result =
+                                                        mergeIfBoth
+                                                            (\a b c ->
+                                                                Decode.andThen
+                                                                    (\d ->
+                                                                        case Decode.decodeValue (propertyDecoder c) b of
+                                                                            Ok resulValue ->
+                                                                                d |> Dict.insert a resulValue >> Decode.succeed
+
+                                                                            Err err ->
+                                                                                Decode.fail err
+                                                                    )
+                                                            )
+                                                            v1
+                                                            v2
+                                                            (Decode.succeed Dict.empty)
+                                                in
+                                                result
+                                                    |> Decode.andThen
+                                                        (\asd ->
+                                                            aAAAA |> Dict.insert index asd >> Decode.succeed
+                                                        )
+                                            )
+
+                                Err a ->
+                                    Decode.fail a
+                        )
+                        tileproperties
+                        tilepropertytypes
+                        (Decode.succeed Dict.empty)
+                        |> Decode.map
+                            (\props ->
+                                Dict.merge
+                                    (\k { objectgroup, animation } acc ->
+                                        Dict.insert k { objectgroup = objectgroup, animation = animation, properties = Dict.empty } acc
+                                    )
+                                    (\k { objectgroup, animation } properties acc ->
+                                        Dict.insert k { objectgroup = objectgroup, animation = animation, properties = properties } acc
+                                    )
+                                    (\k v2 acc -> Dict.insert k { objectgroup = Nothing, animation = Nothing, properties = Dict.empty } acc)
+                                    tiles
+                                    props
+                                    Dict.empty
+                            )
+                )
+                (Decode.field "tileproperties" (Decode.dict (Decode.dict Decode.value)))
+                (Decode.field "tilepropertytypes" (Decode.dict (Decode.dict Decode.string)))
+                (Decode.field "tiles" old_BEBEBE)
+                |> Decode.andThen identity
+
+        old_BEBEBE =
+            Decode.keyValuePairs decodeTilesData_Old
+                |> Decode.andThen
+                    (List.foldl
+                        (\( k, v ) acc ->
+                            case String.toInt k of
+                                Ok index ->
+                                    acc |> Decode.andThen (Dict.insert index v >> Decode.succeed)
+
+                                Err err ->
+                                    Decode.fail err
+                        )
+                        (Decode.succeed Dict.empty)
+                    )
+
+        new =
+            Decode.list decodeTilesDataNew
+                |> Decode.andThen
+                    (List.foldl
+                        (\{ id, objectgroup, animation, properties } acc ->
+                            acc |> Decode.andThen (Dict.insert id { objectgroup = objectgroup, animation = animation, properties = properties } >> Decode.succeed)
+                        )
+                        (Decode.succeed Dict.empty)
+                    )
+                |> Decode.field "tiles"
+    in
+    Decode.oneOf [ old, new ]
+        |> Decode.maybe
+        |> Decode.map (Maybe.withDefault Dict.empty)
+
+
+
+
+{-| -}
+propertyDecoder : String -> Decoder Property
+propertyDecoder typeString =
+    case typeString of
+        "bool" ->
+            Decode.map PropBool Decode.bool
+
+        "color" ->
+            Decode.map PropColor Decode.string
+
+        "float" ->
+            Decode.map PropFloat Decode.float
+
+        "file" ->
+            Decode.map PropFile Decode.string
+
+        "int" ->
+            Decode.map PropInt Decode.int
+
+        "string" ->
+            Decode.map PropString Decode.string
+
+        _ ->
+            Decode.fail <| "I can't decode the type " ++ typeString
+
+
+{-| Decoding properties (with predefined field names) as Dict String Poperty
 -}
-propertiesDecoder : Decoder CustomProperties
-propertiesDecoder =
+propertiesDecoderWith_Old : ( String, String ) -> Decoder (Dict String Property)
+propertiesDecoderWith_Old ( properties, propertytypes ) =
     let
         combine : List (Decoder a) -> Decoder (List a)
         combine =
             List.foldr (Decode.map2 (::)) (Decode.succeed [])
 
-        propertyDecoder : String -> Decoder Property
-        propertyDecoder typeString =
-            case typeString of
-                "bool" ->
-                    Decode.map PropBool Decode.bool
-
-                "color" ->
-                    Decode.map PropColor Decode.string
-
-                "float" ->
-                    Decode.map PropFloat Decode.float
-
-                "file" ->
-                    Decode.map PropFile Decode.string
-
-                "int" ->
-                    Decode.map PropInt Decode.int
-
-                "string" ->
-                    Decode.map PropString Decode.string
-
-                _ ->
-                    Decode.fail <| "I can't decode the type " ++ typeString
-
         decodeProperty : ( String, String ) -> Decoder ( String, Property )
         decodeProperty ( propName, propType ) =
-            Decode.at [ "properties", propName ]
+            Decode.at [ properties, propName ]
                 (propertyDecoder propType)
                 |> Decode.map ((,) propName)
 
         propertiesDecoder : Decoder (Dict String Property)
         propertiesDecoder =
-            Decode.field "propertytypes" (Decode.keyValuePairs Decode.string)
+            Decode.field propertytypes (Decode.keyValuePairs Decode.string)
                 |> Decode.map (List.map decodeProperty)
                 |> Decode.andThen combine
                 |> Decode.map Dict.fromList
     in
-    Decode.maybe propertiesDecoder
+    propertiesDecoder
+        |> Decode.maybe
         |> Decode.map (Maybe.withDefault Dict.empty)
+
+
+propertiesDecoder_New : Decoder (Dict String Property)
+propertiesDecoder_New =
+    Decode.field "properties"
+        (Decode.list
+            (Pipeline.decode identity
+                |> required "type" Decode.string
+                |> Decode.andThen
+                    (\kind ->
+                        Pipeline.decode (,)
+                            |> required "name" Decode.string
+                            |> required "value" (propertyDecoder kind)
+                    )
+            )
+            |> Decode.map Dict.fromList
+        )
+        |> Decode.maybe
+        |> Decode.map (Maybe.withDefault Dict.empty)
+
+
+propertiesDecoderWith : ( String, String ) -> Decoder (Dict String Property)
+propertiesDecoderWith ( properties, propertytypes ) =
+    Decode.oneOf [ propertiesDecoder_New, propertiesDecoderWith_Old ( properties, propertytypes ) ]
+
+
+{-| Decoding properties as Dict String Poperty
+-}
+propertiesDecoder : Decoder CustomProperties
+propertiesDecoder =
+    propertiesDecoderWith ( "properties", "propertytypes" )
 
 
 {-| -}
@@ -471,27 +612,10 @@ decodeEmbeddedTileset =
         |> required "tileheight" Decode.int
         |> required "tilewidth" Decode.int
         |> optional "transparentcolor" Decode.string "none"
-        |> optional "tiles" decodeTiles Dict.empty
+        |> Pipeline.custom decodeTiles
+        -- |> optional "tiles" decodeTiles Dict.empty
         |> Pipeline.custom propertiesDecoder
         |> Decode.map TilesetEmbedded
-
-
-{-| -}
-decodeTiles : Decoder (Dict Int TilesData)
-decodeTiles =
-    Decode.keyValuePairs decodeTilesData
-        |> Decode.andThen
-            (List.foldl
-                (\( i, data ) acc ->
-                    case String.toInt i of
-                        Ok index ->
-                            acc |> Decode.andThen (Dict.insert index data >> Decode.succeed)
-
-                        Err a ->
-                            Decode.fail a
-                )
-                (Decode.succeed Dict.empty)
-            )
 
 
 {-| -}
@@ -504,6 +628,7 @@ type alias TilesDataPlain a =
     { a
         | animation : Maybe (List SpriteAnimation)
         , objectgroup : Maybe TilesDataObjectgroup
+        , properties : CustomProperties
     }
 
 
@@ -520,19 +645,12 @@ type alias TilesDataObjectgroup =
 
 
 {-| -}
-decodeTilesData : Decoder TilesData
-decodeTilesData =
-    Decode.map2 (\a b -> { animation = a, objectgroup = b })
-        (Decode.maybe (field "animation" (Decode.list decodeSpriteAnimation)))
-        (Decode.maybe (field "objectgroup" decodeTilesDataObjectgroup))
-
-
-{-| -}
 decodeTilesDataNew : Decoder (TilesDataPlain { id : Int })
 decodeTilesDataNew =
-    Decode.map3 (\a b c -> { animation = a, objectgroup = b, id = c })
+    Decode.map4 (\a b c d -> { animation = a, objectgroup = b, properties = c, id = d })
         (Decode.maybe (field "animation" (Decode.list decodeSpriteAnimation)))
         (Decode.maybe (field "objectgroup" decodeTilesDataObjectgroup))
+        propertiesDecoder_New
         (field "id" Decode.int)
 
 
