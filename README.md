@@ -26,7 +26,7 @@ load url =
 main : Program Never Tiled.Level Message
 main =
     Html.program
-        { init = ( Tiled.init, load "./some_tiled_level.json" )
+        { init = ( Tiled.empty, load "./some_tiled_level.json" )
         , update = update
         , subscriptions = \_ -> Sub.none
         , view = view

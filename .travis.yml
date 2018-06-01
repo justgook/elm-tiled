@@ -1,5 +1,5 @@
 sudo: false
-
+language: bash
 cache:
   directories:
     - test/elm-stuff/build-artifacts

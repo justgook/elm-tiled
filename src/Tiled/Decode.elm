@@ -623,9 +623,9 @@ decodeEmbeddedTileset =
 
 {-|
 
-    - `animation` : Maybe (List SpriteAnimation)
-    - `objectgroup` : Maybe TilesDataObjectgroup
-    - `properties` : CustomProperties
+    - animation : Maybe (List SpriteAnimation)
+    - objectgroup : Maybe TilesDataObjectgroup
+    - properties : CustomProperties
 -}
 type alias TilesData =
     TilesDataPlain {}
