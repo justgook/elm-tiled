@@ -30,9 +30,13 @@ suite =
                             Expect.fail err
             ]
         , describe "Tiled.Decode.decodeTiles"
-            [ test "old vs new" <|
+            [ test "Animations" <|
                 \_ ->
-                    decodeString Tiled.decodeTiles Mock.tilesDataOld
-                        |> Expect.equal (decodeString Tiled.decodeTiles Mock.tilesDataNew)
+                    decodeString Tiled.decodeTiles Mock.tilesDataOldAnimations
+                        |> Expect.equal (decodeString Tiled.decodeTiles Mock.tilesDataNewAnimations)
+            , test "Properties" <|
+                \_ ->
+                    decodeString Tiled.decodeTiles Mock.tilesDataOldWithProps
+                        |> Expect.equal (decodeString Tiled.decodeTiles Mock.tilesDataNewWithProps)
             ]
         ]

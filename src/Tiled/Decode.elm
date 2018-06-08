@@ -272,80 +272,53 @@ decodeOrientation =
 decodeTiles : Decoder (Dict Int TilesData)
 decodeTiles =
     let
-        decodeTilesData_Old =
-            Decode.map2 (\a b -> { animation = a, objectgroup = b })
-                (Decode.maybe (field "animation" (Decode.list decodeSpriteAnimation)))
-                (Decode.maybe (field "objectgroup" decodeTilesDataObjectgroup))
-
         doNothing a b c =
             c
 
         mergeIfBoth f a b c =
             Dict.merge doNothing f doNothing a b c
 
-        old =
-            Decode.map3
-                (\tileproperties tilepropertytypes tiles ->
-                    mergeIfBoth
-                        (\i v1 v2 acc ->
-                            case String.toInt i of
-                                Ok index ->
-                                    acc
-                                        |> Decode.andThen
-                                            (\aAAAA ->
-                                                let
-                                                    result =
-                                                        mergeIfBoth
-                                                            (\a b c ->
-                                                                Decode.andThen
-                                                                    (\d ->
-                                                                        case Decode.decodeValue (propertyDecoder c) b of
-                                                                            Ok resulValue ->
-                                                                                d |> Dict.insert a resulValue >> Decode.succeed
+        oldPropsDecode tileproperties tilepropertytypes =
+            mergeIfBoth
+                (\i v1 v2 acc ->
+                    case String.toInt i of
+                        Ok index ->
+                            acc
+                                |> Decode.andThen
+                                    (\aAAAA ->
+                                        mergeIfBoth
+                                            (\a b c ->
+                                                Decode.andThen
+                                                    (\d ->
+                                                        case Decode.decodeValue (propertyDecoder c) b of
+                                                            Ok resulValue ->
+                                                                d |> Dict.insert a resulValue >> Decode.succeed
 
-                                                                            Err err ->
-                                                                                Decode.fail err
-                                                                    )
-                                                            )
-                                                            v1
-                                                            v2
-                                                            (Decode.succeed Dict.empty)
-                                                in
-                                                    result
-                                                        |> Decode.andThen
-                                                            (\asd ->
-                                                                aAAAA |> Dict.insert index asd >> Decode.succeed
-                                                            )
+                                                            Err err ->
+                                                                Decode.fail err
+                                                    )
                                             )
+                                            v1
+                                            v2
+                                            (Decode.succeed Dict.empty)
+                                            |> Decode.andThen
+                                                (\asd ->
+                                                    Dict.insert index asd aAAAA |> Decode.succeed
+                                                )
+                                    )
 
-                                Err a ->
-                                    Decode.fail a
-                        )
-                        tileproperties
-                        tilepropertytypes
-                        (Decode.succeed Dict.empty)
-                        |> Decode.map
-                            (\props ->
-                                Dict.merge
-                                    (\k { objectgroup, animation } acc ->
-                                        Dict.insert k { objectgroup = objectgroup, animation = animation, properties = Dict.empty } acc
-                                    )
-                                    (\k { objectgroup, animation } properties acc ->
-                                        Dict.insert k { objectgroup = objectgroup, animation = animation, properties = properties } acc
-                                    )
-                                    (\k v2 acc -> Dict.insert k { objectgroup = Nothing, animation = Nothing, properties = Dict.empty } acc)
-                                    tiles
-                                    props
-                                    Dict.empty
-                            )
+                        Err a ->
+                            Decode.fail a
                 )
-                (Decode.field "tileproperties" (Decode.dict (Decode.dict Decode.value)))
-                (Decode.field "tilepropertytypes" (Decode.dict (Decode.dict Decode.string)))
-                (Decode.field "tiles" old_BEBEBE)
-                |> Decode.andThen identity
+                tileproperties
+                tilepropertytypes
+                (Decode.succeed Dict.empty)
 
-        old_BEBEBE =
-            Decode.keyValuePairs decodeTilesData_Old
+        oldTilesDecoder =
+            Decode.map2 (\a b -> { animation = a, objectgroup = b })
+                (Decode.maybe (field "animation" (Decode.list decodeSpriteAnimation)))
+                (Decode.maybe (field "objectgroup" decodeTilesDataObjectgroup))
+                |> Decode.keyValuePairs
                 |> Decode.andThen
                     (List.foldl
                         (\( k, v ) acc ->
@@ -358,6 +331,38 @@ decodeTiles =
                         )
                         (Decode.succeed Dict.empty)
                     )
+
+        appendOldTileDataToProps tiles =
+            Decode.map
+                (\props ->
+                    Dict.merge
+                        (\k { objectgroup, animation } acc ->
+                            Dict.insert k { objectgroup = objectgroup, animation = animation, properties = Dict.empty } acc
+                        )
+                        (\k { objectgroup, animation } properties acc ->
+                            Dict.insert k { objectgroup = objectgroup, animation = animation, properties = properties } acc
+                        )
+                        (\k v2 acc -> Dict.insert k { objectgroup = Nothing, animation = Nothing, properties = Dict.empty } acc)
+                        tiles
+                        props
+                        Dict.empty
+                )
+
+        old =
+            Decode.map3
+                (\tileproperties tilepropertytypes tiles ->
+                    case ( tileproperties, tilepropertytypes ) of
+                        ( Just prop, Just types ) ->
+                            oldPropsDecode prop types
+                                |> appendOldTileDataToProps tiles
+
+                        _ ->
+                            Dict.empty |> Decode.succeed |> appendOldTileDataToProps tiles
+                )
+                (Decode.field "tileproperties" (Decode.dict (Decode.dict Decode.value)) |> Decode.maybe)
+                (Decode.field "tilepropertytypes" (Decode.dict (Decode.dict Decode.string)) |> Decode.maybe)
+                (Decode.field "tiles" oldTilesDecoder)
+                |> Decode.andThen identity
 
         new =
             Decode.list decodeTilesDataNew
