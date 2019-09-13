@@ -1,6 +1,6 @@
 module Tiled exposing
     ( decode, encode
-    , GidInfo, gidInfo
+    , gidInfo, GidInfo
     )
 
 {-| Use the [`decode`](#decode) to get [`Level`](Tiled-Level)
@@ -9,6 +9,11 @@ module Tiled exposing
 # Default Decoding
 
 @docs decode, encode
+
+
+# Helpers
+
+@docs gidInfo, GidInfo
 
 -}
 
@@ -35,6 +40,7 @@ decode =
 -- http://doc.mapeditor.org/en/latest/reference/tmx-map-format/#tile-flipping
 
 
+{-| -}
 type alias GidInfo =
     { gid : Int
     , fh : Bool
@@ -43,6 +49,8 @@ type alias GidInfo =
     }
 
 
+{-| The highest three bits of the `gid` store the flipped states. Bit 32 is used for storing whether the tile is horizontally flipped, bit 31 is used for the vertically flipped tiles and bit 30 indicates whether the tile is flipped (anti) diagonally, enabling tile rotation. These bits have to be read and cleared before you can find out which tileset a tile belongs to.
+-}
 gidInfo : Int -> GidInfo
 gidInfo gid =
     { gid = cleanGid gid

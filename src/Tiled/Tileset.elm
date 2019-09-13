@@ -56,6 +56,7 @@ decode =
         ]
 
 
+{-| -}
 decodeFile : Int -> Decoder Tileset
 decodeFile firstgid =
     Decode.oneOf
@@ -146,6 +147,7 @@ addAnimationIf l =
         (::) ( "animation", Encode.list encodeSpriteAnimation l )
 
 
+{-| -}
 encodeTilesData : ( Int, TilesDataPlain a ) -> Encode.Value
 encodeTilesData ( id, data ) =
     []
@@ -250,6 +252,7 @@ decodeTiles =
             )
 
 
+{-| -}
 decodeTilesData : Decoder (Maybe (TilesDataPlain { id : Int }))
 decodeTilesData =
     Decode.succeed
@@ -348,6 +351,7 @@ decodeImageCollectionTileDataTiles =
         |> Decode.map (List.foldl (\( i, v ) acc -> Dict.insert i v acc) Dict.empty)
 
 
+{-| -}
 type alias GridData =
     { height : Int
     , orientation : String
@@ -457,6 +461,7 @@ type alias EmbeddedTileData =
     }
 
 
+{-| -}
 type alias TilesData =
     TilesDataPlain {}
 

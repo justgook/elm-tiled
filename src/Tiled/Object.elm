@@ -14,7 +14,6 @@ module Tiled.Object exposing
 
 import Dict
 import Json.Decode as Decode exposing (Decoder)
-import Json.Decode.Extra exposing (when)
 import Json.Decode.Pipeline exposing (optional, required)
 import Json.Encode as Encode
 import Tiled.Properties as Properties exposing (Properties)
@@ -66,14 +65,17 @@ type alias PolyPoints =
         }
 
 
+{-| -}
 type alias CommonDimension =
     Common (Dimension {})
 
 
+{-| -}
 type alias CommonDimensionGid =
     Common (Dimension { gid : Gid })
 
 
+{-| -}
 type alias CommonDimensionPolyPoints =
     Common
         (Dimension
@@ -302,3 +304,18 @@ decodePolyPoints =
 decodeGid : Decoder Gid
 decodeGid =
     Decode.field "gid" Decode.int
+
+
+{-| Json.Decode.Extra
+-}
+when : Decoder a -> (a -> Bool) -> Decoder b -> Decoder b
+when checkDecoder check passDecoder =
+    Decode.andThen
+        (\checkVal ->
+            if check checkVal then
+                passDecoder
+
+            else
+                Decode.fail "Check failed with input"
+        )
+        checkDecoder

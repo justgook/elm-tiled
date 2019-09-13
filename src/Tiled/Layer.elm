@@ -1,14 +1,13 @@
 module Tiled.Layer exposing
     ( Layer(..), decode, encode
-    , TileData, ImageData, ObjectData, DrawOrder(..)
+    , TileData, ImageData, ObjectData, DrawOrder(..), Chunk, TileChunkedData
     , decodeDraworder, encodeDraworder
-    , Chunk, TileChunkedData
     )
 
 {-|
 
 @docs Layer, decode, encode
-@docs TileData, ImageData, ObjectData, DrawOrder, Chunks
+@docs TileData, ImageData, ObjectData, DrawOrder, Chunk, TileChunkedData
 
 
 # Internal
@@ -182,6 +181,7 @@ decodeDraworder =
             )
 
 
+{-| -}
 encodeDraworder : DrawOrder -> Encode.Value
 encodeDraworder do =
     (case do of
@@ -399,6 +399,7 @@ type alias TileData =
     }
 
 
+{-| -}
 type alias TileChunkedData =
     { id : Int
     , chunks : List Chunk
