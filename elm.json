@@ -3,7 +3,7 @@
     "name": "justgook/elm-tiled",
     "summary": "A library for building decoders for Tiled levels.",
     "license": "BSD-3-Clause",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "exposed-modules": [
         "Tiled",
         "Tiled.Level",
