@@ -2,6 +2,7 @@ module Tiled.Level exposing
     ( Level(..)
     , decode, encode
     , LevelData, StaggeredLevelData, ExtensibleLevelData
+    , Axis(..), OddOrEven(..), RenderOrder(..)
     )
 
 {-|
@@ -13,6 +14,11 @@ module Tiled.Level exposing
 # Level Data
 
 @docs LevelData, StaggeredLevelData, ExtensibleLevelData
+
+
+# Helper Types
+
+@docs Axis, OddOrEven, RenderOrder
 
 -}
 
@@ -67,7 +73,8 @@ type alias StaggeredLevelData =
         }
 
 
-{-| -}
+{-| Used in `renderorder` property of `Level` - (orthogonal maps only)
+-}
 type RenderOrder
     = RightDown
     | RightUp
@@ -75,11 +82,15 @@ type RenderOrder
     | LeftUp
 
 
+{-| Used in `staggeraxis` property of `Level` - (staggered / hexagonal maps only)
+-}
 type Axis
     = X
     | Y
 
 
+{-| Used in `staggerindex` property of `Level` - (staggered / hexagonal maps only)
+-}
 type OddOrEven
     = Odd
     | Even
@@ -211,76 +222,86 @@ encodeRenderOrder ro =
 
 decodeLevelData : Decoder LevelData
 decodeLevelData =
-    Decode.succeed
-        (\backgroundcolor height infinite layers nextobjectid renderorder tiledversion tileheight tilesets tilewidth version width props ->
-            { backgroundcolor = backgroundcolor
-            , height = height
-            , infinite = infinite
-            , layers = layers
-            , nextobjectid = nextobjectid
-            , renderorder = renderorder
-            , tiledversion = tiledversion
-            , tileheight = tileheight
-            , tilesets = tilesets
-            , tilewidth = tilewidth
-            , version = version
-            , width = width
-            , properties = props
-            }
-        )
-        |> optional "backgroundcolor" Decode.string ""
-        |> required "height" Decode.int
-        |> required "infinite" Decode.bool
-        |> required "layers" (Decode.list Layer.decode)
-        |> required "nextobjectid" Decode.int
-        |> required "renderorder" decodeRenderOrder
-        |> required "tiledversion" Decode.string
-        |> required "tileheight" Decode.int
-        |> required "tilesets" (Decode.list Tileset.decode)
-        |> required "tilewidth" Decode.int
-        |> required "version" Decode.float
-        |> required "width" Decode.int
-        |> optional "properties" Properties.decode Dict.empty
+    Decode.field "infinite" Decode.bool
+        |> Decode.andThen
+            (\infinite ->
+                Decode.succeed
+                    (\backgroundcolor height layers nextobjectid renderorder tiledversion tileheight tilesets tilewidth version width props ->
+                        { backgroundcolor = backgroundcolor
+                        , height = height
+                        , infinite = infinite
+                        , layers = layers
+                        , nextobjectid = nextobjectid
+                        , renderorder = renderorder
+                        , tiledversion = tiledversion
+                        , tileheight = tileheight
+                        , tilesets = tilesets
+                        , tilewidth = tilewidth
+                        , version = version
+                        , width = width
+                        , properties = props
+                        }
+                    )
+                    |> optional "backgroundcolor" Decode.string ""
+                    |> required "height" Decode.int
+                    |> required "layers" (infinite |> Layer.decode |> Decode.list)
+                    |> required "nextobjectid" Decode.int
+                    |> required "renderorder" decodeRenderOrder
+                    |> required "tiledversion" Decode.string
+                    |> required "tileheight" Decode.int
+                    |> required "tilesets" (Decode.list Tileset.decode)
+                    |> required "tilewidth" Decode.int
+                    |> required "version" Decode.float
+                    |> required "width" Decode.int
+                    |> optional "properties" Properties.decode Dict.empty
+            )
+
+
+
+--
 
 
 decodeStaggeredlevelData : Decoder StaggeredLevelData
 decodeStaggeredlevelData =
-    Decode.succeed
-        (\backgroundcolor height infinite layers nextobjectid renderorder tiledversion tileheight tilesets tilewidth version width props hexsidelength staggeraxis staggerindex ->
-            { backgroundcolor = backgroundcolor
-            , height = height
-            , hexsidelength = hexsidelength
-            , infinite = infinite
-            , layers = layers
-            , nextobjectid = nextobjectid
-            , renderorder = renderorder
-            , staggeraxis = staggeraxis
-            , staggerindex = staggerindex
-            , tiledversion = tiledversion
-            , tileheight = tileheight
-            , tilesets = tilesets
-            , tilewidth = tilewidth
-            , version = version
-            , width = width
-            , properties = props
-            }
-        )
-        |> optional "backgroundcolor" Decode.string ""
-        |> required "height" Decode.int
-        |> required "infinite" Decode.bool
-        |> required "layers" (Decode.list Layer.decode)
-        |> required "nextobjectid" Decode.int
-        |> required "renderorder" decodeRenderOrder
-        |> required "tiledversion" Decode.string
-        |> required "tileheight" Decode.int
-        |> required "tilesets" (Decode.list Tileset.decode)
-        |> required "tilewidth" Decode.int
-        |> required "version" Decode.float
-        |> required "width" Decode.int
-        |> optional "properties" Properties.decode Dict.empty
-        |> required "hexsidelength" Decode.int
-        |> required "staggeraxis" decodeAxis
-        |> required "staggerindex" decodeOddOrEven
+    Decode.field "infinite" Decode.bool
+        |> Decode.andThen
+            (\infinite ->
+                Decode.succeed
+                    (\backgroundcolor height layers nextobjectid renderorder tiledversion tileheight tilesets tilewidth version width props hexsidelength staggeraxis staggerindex ->
+                        { backgroundcolor = backgroundcolor
+                        , height = height
+                        , hexsidelength = hexsidelength
+                        , infinite = infinite
+                        , layers = layers
+                        , nextobjectid = nextobjectid
+                        , renderorder = renderorder
+                        , staggeraxis = staggeraxis
+                        , staggerindex = staggerindex
+                        , tiledversion = tiledversion
+                        , tileheight = tileheight
+                        , tilesets = tilesets
+                        , tilewidth = tilewidth
+                        , version = version
+                        , width = width
+                        , properties = props
+                        }
+                    )
+                    |> optional "backgroundcolor" Decode.string ""
+                    |> required "height" Decode.int
+                    |> required "layers" (infinite |> Layer.decode |> Decode.list)
+                    |> required "nextobjectid" Decode.int
+                    |> required "renderorder" decodeRenderOrder
+                    |> required "tiledversion" Decode.string
+                    |> required "tileheight" Decode.int
+                    |> required "tilesets" (Decode.list Tileset.decode)
+                    |> required "tilewidth" Decode.int
+                    |> required "version" Decode.float
+                    |> required "width" Decode.int
+                    |> optional "properties" Properties.decode Dict.empty
+                    |> required "hexsidelength" Decode.int
+                    |> required "staggeraxis" decodeAxis
+                    |> required "staggerindex" decodeOddOrEven
+            )
 
 
 decodeRenderOrder : Decoder RenderOrder

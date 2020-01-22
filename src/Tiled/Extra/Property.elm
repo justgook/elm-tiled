@@ -1,10 +1,16 @@
-module Tiled.NestedProperties exposing (Property(..), at, convert, get, toList, values)
+module Tiled.Extra.Property exposing (Property(..), convert, get, at, values, toList)
+
+{-| Nested way to represent custom properties.
+
+@docs Property, convert, get, at, values, toList
+
+-}
 
 import Dict exposing (Dict)
 import Tiled.Properties
 
 
-{-| Custom properties values
+{-| Custom nested properties
 -}
 type Property
     = PropBool Bool
@@ -16,6 +22,31 @@ type Property
     | PropCollection (Dict String Property)
 
 
+{-| Convert [`Tiled.Properties`](Tiled-Properties#Properties) to [`Tiled.Extra.Property`](Tiled-Extra-Property#Property) all properties that have `name.subName` or `name[subName]` is grouped as `PropCollection` with nested properties of `subName`.
+
+Example:
+
+    {
+      "prop1.a": 1,
+      "prop1.b": 2,
+      "prop1[c]": 3,
+      "prop2.a": 4
+    }
+
+become:
+
+    {
+      "prop1": {
+        "a": 1,
+        "b": 2,
+        "c": 3
+      },
+      "prop2": {
+        "a": 4
+      }
+    }
+
+-}
 convert : Tiled.Properties.Properties -> Property
 convert props =
     props
@@ -23,19 +54,24 @@ convert props =
         |> digIn Dict.empty
 
 
+{-| Get deep property:
+
+    Property.get "a.b.c.d" prop
+
+-}
 get : String -> Property -> Maybe Property
 get k prop =
-    case prop of
-        PropCollection dict ->
-            Dict.get k dict
-
-        _ ->
-            Nothing
+    at (keyToPath k) prop
 
 
+{-| Same as [`get`](Tiled-Extra-Property#get) but path is List of keys
+
+    Property.get [ "a", "b", "c", "d" ] prop
+
+-}
 at : List String -> Property -> Maybe Property
-at l prop =
-    case ( l, prop ) of
+at path prop =
+    case ( path, prop ) of
         ( k :: rest, PropCollection dict ) ->
             Dict.get k dict
                 |> Maybe.andThen (at rest)
@@ -47,6 +83,8 @@ at l prop =
             Nothing
 
 
+{-| Convert `PropCollection` to `List` of its values, or get list of single `Property`
+-}
 values : Property -> List Property
 values property =
     case property of
@@ -57,6 +95,8 @@ values property =
             [ p ]
 
 
+{-| Convert `PropCollection` to List of key-value pairs
+-}
 toList : Property -> List ( String, Property )
 toList property =
     case property of
@@ -71,23 +111,24 @@ digIn : Dict String Property -> List ( String, Tiled.Properties.Property ) -> Pr
 digIn acc list =
     case list of
         ( key, value ) :: rest ->
-            let
-                crumbs =
-                    String.replace "[" "." key
-                        |> String.replace "]" "."
-                        |> String.replace ".." "."
-                        |> (\a -> applyIf (String.endsWith "." a) (String.dropRight 1) a)
-                        |> String.split "."
-            in
-            digIn (updateCrumbsInt crumbs value acc) rest
+            digIn (updateCrumbsInt (keyToPath key) value acc) rest
 
         [] ->
             PropCollection acc
 
 
+keyToPath : String -> List String
+keyToPath key =
+    String.replace "[" "." key
+        |> String.replace "]" "."
+        |> String.replace ".." "."
+        |> (\a -> applyIf (String.endsWith "." a) (String.dropRight 1) a)
+        |> String.split "."
+
+
 updateCrumbsInt : List String -> Tiled.Properties.Property -> Dict String Property -> Dict String Property
-updateCrumbsInt crumbs val props =
-    case crumbs of
+updateCrumbsInt path val props =
+    case path of
         [] ->
             props
 
