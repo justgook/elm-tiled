@@ -14,6 +14,6 @@ suite =
             \obj ->
                 obj
                     |> encode
-                    |> Json.Decode.decodeValue decode
+                    |> Json.Decode.decodeValue (decode False)
                     |> Expect.equal (Ok obj)
         ]
