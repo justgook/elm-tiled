@@ -13,16 +13,16 @@ import Tiled.Properties
 {-| Custom nested properties
 -}
 type Property
-    = PropBool Bool
-    | PropInt Int
-    | PropFloat Float
-    | PropString String
-    | PropColor String
-    | PropFile String
-    | PropCollection (Dict String Property)
+    = Bool Bool
+    | Int Int
+    | Float Float
+    | String String
+    | Color String
+    | File String
+    | Group (Dict String Property)
 
 
-{-| Convert [`Tiled.Properties`](Tiled-Properties#Properties) to [`Tiled.Extra.Property`](Tiled-Extra-Property#Property) all properties that have `name.subName` or `name[subName]` is grouped as `PropCollection` with nested properties of `subName`.
+{-| Convert [`Tiled.Properties`](Tiled-Properties#Properties) to [`Tiled.Extra.Property`](Tiled-Extra-Property#Property) all properties that have `name.subName` or `name[subName]` is grouped as `Group` with nested properties of `subName`.
 
 Example:
 
@@ -72,7 +72,7 @@ get k prop =
 at : List String -> Property -> Maybe Property
 at path prop =
     case ( path, prop ) of
-        ( k :: rest, PropCollection dict ) ->
+        ( k :: rest, Group dict ) ->
             Dict.get k dict
                 |> Maybe.andThen (at rest)
 
@@ -83,24 +83,24 @@ at path prop =
             Nothing
 
 
-{-| Convert `PropCollection` to `List` of its values, or get list of single `Property`
+{-| Convert `Group` to `List` of its values, or get list of single `Property`
 -}
 values : Property -> List Property
 values property =
     case property of
-        PropCollection dict ->
+        Group dict ->
             Dict.values dict
 
         p ->
             [ p ]
 
 
-{-| Convert `PropCollection` to List of key-value pairs
+{-| Convert `Group` to List of key-value pairs
 -}
 toList : Property -> List ( String, Property )
 toList property =
     case property of
-        PropCollection dict ->
+        Group dict ->
             Dict.toList dict
 
         p ->
@@ -114,7 +114,7 @@ digIn acc list =
             digIn (updateCrumbsInt (keyToPath key) value acc) rest
 
         [] ->
-            PropCollection acc
+            Group acc
 
 
 keyToPath : String -> List String
@@ -139,34 +139,34 @@ updateCrumbsInt path val props =
             let
                 oldProps =
                     case Dict.get x props of
-                        Just (PropCollection currentProps) ->
+                        Just (Group currentProps) ->
                             currentProps
 
                         _ ->
                             Dict.empty
             in
-            Dict.insert x (PropCollection (updateCrumbsInt xs val oldProps)) props
+            Dict.insert x (Group (updateCrumbsInt xs val oldProps)) props
 
 
 prop2Prop v_ =
     case v_ of
-        Tiled.Properties.PropBool v ->
-            PropBool v
+        Tiled.Properties.Bool v ->
+            Bool v
 
-        Tiled.Properties.PropInt v ->
-            PropInt v
+        Tiled.Properties.Int v ->
+            Int v
 
-        Tiled.Properties.PropFloat v ->
-            PropFloat v
+        Tiled.Properties.Float v ->
+            Float v
 
-        Tiled.Properties.PropString v ->
-            PropString v
+        Tiled.Properties.String v ->
+            String v
 
-        Tiled.Properties.PropColor v ->
-            PropColor v
+        Tiled.Properties.Color v ->
+            Color v
 
-        Tiled.Properties.PropFile v ->
-            PropFile v
+        Tiled.Properties.File v ->
+            File v
 
 
 {-| -}

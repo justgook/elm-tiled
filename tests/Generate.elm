@@ -74,12 +74,12 @@ layer =
 property : Fuzzer Property
 property =
     Fuzz.oneOf
-        [ Fuzz.map PropBool Fuzz.bool
-        , Fuzz.map PropInt Fuzz.int
-        , Fuzz.map PropFloat Fuzz.float
-        , Fuzz.map PropString Fuzz.string
-        , Fuzz.map PropColor Fuzz.string
-        , Fuzz.map PropFile Fuzz.string
+        [ Fuzz.map Bool Fuzz.bool
+        , Fuzz.map Int Fuzz.int
+        , Fuzz.map Float Fuzz.float
+        , Fuzz.map String Fuzz.string
+        , Fuzz.map Color Fuzz.string
+        , Fuzz.map File Fuzz.string
         ]
 
 

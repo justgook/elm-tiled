@@ -24,12 +24,12 @@ type alias Properties =
 {-| Custom properties values
 -}
 type Property
-    = PropBool Bool
-    | PropInt Int
-    | PropFloat Float
-    | PropString String
-    | PropColor String
-    | PropFile String
+    = Bool Bool
+    | Int Int
+    | Float Float
+    | String String
+    | Color String
+    | File String
 
 
 {-| -}
@@ -58,22 +58,22 @@ encode props =
                 Encode.object
                     (( "name", Encode.string key )
                         :: (case value of
-                                PropBool v ->
+                                Bool v ->
                                     [ ( "type", Encode.string "bool" ), ( "value", Encode.bool v ) ]
 
-                                PropInt v ->
+                                Int v ->
                                     [ ( "type", Encode.string "int" ), ( "value", Encode.int v ) ]
 
-                                PropFloat v ->
+                                Float v ->
                                     [ ( "type", Encode.string "float" ), ( "value", Encode.float v ) ]
 
-                                PropString v ->
+                                String v ->
                                     [ ( "type", Encode.string "string" ), ( "value", Encode.string v ) ]
 
-                                PropColor v ->
+                                Color v ->
                                     [ ( "type", Encode.string "color" ), ( "value", Encode.string v ) ]
 
-                                PropFile v ->
+                                File v ->
                                     [ ( "type", Encode.string "file" ), ( "value", Encode.string v ) ]
                            )
                     )
@@ -85,22 +85,22 @@ decodeProperty : String -> Decoder Property
 decodeProperty typeString =
     case typeString of
         "bool" ->
-            Decode.map PropBool Decode.bool
+            Decode.map Bool Decode.bool
 
         "color" ->
-            Decode.map PropColor Decode.string
+            Decode.map Color Decode.string
 
         "float" ->
-            Decode.map PropFloat Decode.float
+            Decode.map Float Decode.float
 
         "file" ->
-            Decode.map PropFile Decode.string
+            Decode.map File Decode.string
 
         "int" ->
-            Decode.map PropInt Decode.int
+            Decode.map Int Decode.int
 
         "string" ->
-            Decode.map PropString Decode.string
+            Decode.map String Decode.string
 
         _ ->
             Decode.fail <| "I can't decode the type " ++ typeString
