@@ -19,7 +19,6 @@ import Tiled.Level exposing (Level)
 
 type Message
     = LevelLoaded (Result Http.Error Level)
-    = LevelLoaded (Result Http.Error Level)
 
 
 load : String -> Cmd Message
