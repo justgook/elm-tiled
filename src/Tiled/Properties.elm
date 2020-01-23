@@ -107,7 +107,7 @@ decodeProperty typeString =
             Decode.map File Decode.string
 
         "object" ->
-            Decode.map String Decode.string
+            Decode.map Object Decode.int
 
         _ ->
             Decode.fail <| "I can't decode the property type " ++ typeString

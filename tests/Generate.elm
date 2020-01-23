@@ -80,6 +80,7 @@ property =
         , Fuzz.map String Fuzz.string
         , Fuzz.map Color Fuzz.string
         , Fuzz.map File Fuzz.string
+        , Fuzz.map Tiled.Properties.Object Fuzz.int
         ]
 
 
