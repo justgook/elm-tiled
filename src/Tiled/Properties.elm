@@ -30,6 +30,7 @@ type Property
     | String String
     | Color String
     | File String
+    | Object Int
 
 
 {-| -}
@@ -75,6 +76,9 @@ encode props =
 
                                 File v ->
                                     [ ( "type", Encode.string "file" ), ( "value", Encode.string v ) ]
+
+                                Object v ->
+                                    [ ( "type", Encode.string "object" ), ( "value", Encode.int v ) ]
                            )
                     )
             )
@@ -87,20 +91,23 @@ decodeProperty typeString =
         "bool" ->
             Decode.map Bool Decode.bool
 
-        "color" ->
-            Decode.map Color Decode.string
+        "int" ->
+            Decode.map Int Decode.int
 
         "float" ->
             Decode.map Float Decode.float
 
-        "file" ->
-            Decode.map File Decode.string
-
-        "int" ->
-            Decode.map Int Decode.int
-
         "string" ->
             Decode.map String Decode.string
 
+        "color" ->
+            Decode.map Color Decode.string
+
+        "file" ->
+            Decode.map File Decode.string
+
+        "object" ->
+            Decode.map String Decode.string
+
         _ ->
-            Decode.fail <| "I can't decode the type " ++ typeString
+            Decode.fail <| "I can't decode the property type " ++ typeString

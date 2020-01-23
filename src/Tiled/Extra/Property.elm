@@ -19,6 +19,7 @@ type Property
     | String String
     | Color String
     | File String
+    | Object Int
     | Group (Dict String Property)
 
 
@@ -167,6 +168,9 @@ prop2Prop v_ =
 
         Tiled.Properties.File v ->
             File v
+
+        Tiled.Properties.Object v ->
+            Object v
 
 
 {-| -}
